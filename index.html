@@ -1,0 +1,383 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/png" href="/image.png" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>GudGum Store Locator</title>
+    <meta name="description" content="Find GudGum stores near you with our interactive store locator. Get directions, store hours, and contact information.">
+    <style>
+      /* Clean White to Light Blue Gradient Design */
+      :root {
+        /* Primary colors - muted and professional */
+        --primary-50: #f8fafc;
+        --primary-100: #f1f5f9;
+        --primary-200: #e2e8f0;
+        --primary-300: #cbd5e1;
+        --primary-400: #94a3b8;
+        --primary-500: #64748b;
+        --primary-600: #475569;
+        --primary-700: #334155;
+        --primary-800: #1e293b;
+        --primary-900: #0f172a;
+
+        /* Accent colors - subtle blue tones */
+        --accent-50: #eff6ff;
+        --accent-100: #dbeafe;
+        --accent-200: #bfdbfe;
+        --accent-300: #93c5fd;
+        --accent-400: #60a5fa;
+        --accent-500: #3b82f6;
+        --accent-600: #2563eb;
+        --accent-700: #1d4ed8;
+        --accent-800: #1e40af;
+        --accent-900: #1e3a8a;
+
+        /* Success/Error colors - muted for professionalism */
+        --success-50: #f0fdf4;
+        --success-100: #dcfce7;
+        --success-200: #bbf7d0;
+        --success-500: #22c55e;
+        --success-600: #16a34a;
+        --success-700: #15803d;
+
+        --error-50: #fef2f2;
+        --error-100: #fee2e2;
+        --error-200: #fecaca;
+        --error-500: #ef4444;
+        --error-600: #dc2626;
+        --error-700: #b91c1c;
+
+        /* Warning colors */
+        --warning-50: #fffbeb;
+        --warning-100: #fef3c7;
+        --warning-200: #fde68a;
+        --warning-500: #f59e0b;
+        --warning-600: #d97706;
+
+        /* Glass morphism variables - subtle and clean */
+        --glass-bg: rgba(255, 255, 255, 0.7);
+        --glass-bg-strong: rgba(255, 255, 255, 0.85);
+        --glass-border: rgba(255, 255, 255, 0.3);
+        --glass-border-strong: rgba(255, 255, 255, 0.5);
+        --glass-shadow: 0 4px 24px rgba(0, 0, 0, 0.06);
+        --glass-shadow-strong: 0 8px 32px rgba(0, 0, 0, 0.12);
+        --glass-backdrop: blur(16px);
+        --glass-backdrop-strong: blur(24px);
+
+        /* Text colors for excellent readability */
+        --text-primary: #1e293b;
+        --text-secondary: #475569;
+        --text-tertiary: #64748b;
+        --text-muted: #94a3b8;
+        --text-light: #cbd5e1;
+      }
+
+      /* Base styles with gradient background */
+      html {
+        scroll-behavior: smooth;
+      }
+
+      body {
+        background: linear-gradient(180deg, #ffffff 0%, #f8fafc 25%, #f1f5f9 50%, #e6f3ff 100%);
+        background-attachment: fixed;
+        color: var(--text-primary);
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+        line-height: 1.6;
+        min-height: 100vh;
+        font-weight: 400;
+      }
+
+      /* Clean glass morphism components */
+      .clean-glass {
+        background: var(--glass-bg);
+        backdrop-filter: var(--glass-backdrop);
+        -webkit-backdrop-filter: var(--glass-backdrop);
+        border: 1px solid var(--glass-border);
+        box-shadow: var(--glass-shadow);
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      }
+
+      .clean-glass:hover {
+        background: var(--glass-bg-strong);
+        border-color: var(--glass-border-strong);
+        box-shadow: var(--glass-shadow-strong);
+        transform: translateY(-1px);
+      }
+
+      .clean-glass-strong {
+        background: var(--glass-bg-strong);
+        backdrop-filter: var(--glass-backdrop-strong);
+        -webkit-backdrop-filter: var(--glass-backdrop-strong);
+        border: 1px solid var(--glass-border-strong);
+        box-shadow: var(--glass-shadow-strong);
+      }
+
+      /* Button styles - clean and minimal */
+      .clean-button {
+        background: var(--glass-bg);
+        backdrop-filter: var(--glass-backdrop);
+        -webkit-backdrop-filter: var(--glass-backdrop);
+        border: 1px solid var(--glass-border);
+        color: var(--text-secondary);
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        font-weight: 500;
+      }
+
+      .clean-button:hover {
+        background: var(--glass-bg-strong);
+        border-color: var(--accent-300);
+        color: var(--accent-700);
+        transform: translateY(-1px);
+        box-shadow: var(--glass-shadow);
+      }
+
+      .clean-button-primary {
+        background: linear-gradient(135deg, var(--accent-500), var(--accent-600));
+        border: 1px solid var(--accent-600);
+        color: white;
+        box-shadow: var(--glass-shadow);
+        font-weight: 600;
+      }
+
+      .clean-button-primary:hover {
+        background: linear-gradient(135deg, var(--accent-600), var(--accent-700));
+        border-color: var(--accent-700);
+        transform: translateY(-2px);
+        box-shadow: var(--glass-shadow-strong);
+      }
+
+      .clean-button-success {
+        background: linear-gradient(135deg, var(--success-500), var(--success-600));
+        border: 1px solid var(--success-600);
+        color: white;
+        box-shadow: var(--glass-shadow);
+        font-weight: 600;
+      }
+
+      .clean-button-success:hover {
+        background: linear-gradient(135deg, var(--success-600), var(--success-700));
+        border-color: var(--success-700);
+        transform: translateY(-2px);
+        box-shadow: var(--glass-shadow-strong);
+      }
+
+      .clean-button-error {
+        background: linear-gradient(135deg, var(--error-500), var(--error-600));
+        border: 1px solid var(--error-600);
+        color: white;
+        box-shadow: var(--glass-shadow);
+        font-weight: 600;
+      }
+
+      .clean-button-error:hover {
+        background: linear-gradient(135deg, var(--error-600), var(--error-700));
+        border-color: var(--error-700);
+        transform: translateY(-2px);
+        box-shadow: var(--glass-shadow-strong);
+      }
+
+      /* Input styles - clean and accessible */
+      .clean-input {
+        background: var(--glass-bg);
+        backdrop-filter: var(--glass-backdrop);
+        -webkit-backdrop-filter: var(--glass-backdrop);
+        border: 1px solid var(--glass-border);
+        color: var(--text-primary);
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      }
+
+      .clean-input:focus {
+        outline: none;
+        background: var(--glass-bg-strong);
+        border-color: var(--accent-400);
+        box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1), var(--glass-shadow);
+      }
+
+      .clean-input::placeholder {
+        color: var(--text-muted);
+      }
+
+      /* Header styles */
+      .clean-header {
+        background: var(--glass-bg-strong);
+        backdrop-filter: var(--glass-backdrop-strong);
+        -webkit-backdrop-filter: var(--glass-backdrop-strong);
+        border-bottom: 1px solid var(--glass-border);
+      }
+
+      /* Status styles with excellent contrast */
+      .status-success {
+        background: var(--success-50);
+        border: 1px solid var(--success-200);
+        color: var(--success-700);
+        backdrop-filter: var(--glass-backdrop);
+        -webkit-backdrop-filter: var(--glass-backdrop);
+      }
+
+      .status-error {
+        background: var(--error-50);
+        border: 1px solid var(--error-200);
+        color: var(--error-700);
+        backdrop-filter: var(--glass-backdrop);
+        -webkit-backdrop-filter: var(--glass-backdrop);
+      }
+
+      .status-warning {
+        background: var(--warning-50);
+        border: 1px solid var(--warning-200);
+        color: var(--warning-600);
+        backdrop-filter: var(--glass-backdrop);
+        -webkit-backdrop-filter: var(--glass-backdrop);
+      }
+
+      .status-info {
+        background: var(--accent-50);
+        border: 1px solid var(--accent-200);
+        color: var(--accent-700);
+        backdrop-filter: var(--glass-backdrop);
+        -webkit-backdrop-filter: var(--glass-backdrop);
+      }
+
+      /* Typography - clean and readable */
+      .text-heading {
+        color: var(--text-primary);
+        font-weight: 600;
+      }
+
+      .text-body {
+        color: var(--text-secondary);
+        font-weight: 400;
+      }
+
+      .text-muted {
+        color: var(--text-tertiary);
+        font-weight: 400;
+      }
+
+      .text-light {
+        color: var(--text-muted);
+        font-weight: 400;
+      }
+
+      /* Subtle animations */
+      .gentle-float {
+        animation: gentleFloat 8s ease-in-out infinite;
+      }
+
+      @keyframes gentleFloat {
+        0%, 100% { transform: translateY(0px); }
+        50% { transform: translateY(-4px); }
+      }
+
+      .gentle-pulse {
+        animation: gentlePulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+      }
+
+      @keyframes gentlePulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.9; }
+      }
+
+      /* Smooth transitions */
+      .fade-in {
+        animation: fadeIn 0.5s ease-out;
+      }
+
+      .slide-up {
+        animation: slideUp 0.5s ease-out;
+      }
+
+      .scale-in {
+        animation: scaleIn 0.4s ease-out;
+      }
+
+      @keyframes fadeIn {
+        from { opacity: 0; }
+        to { opacity: 1; }
+      }
+
+      @keyframes slideUp {
+        from {
+          opacity: 0;
+          transform: translateY(16px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+
+      @keyframes scaleIn {
+        from {
+          opacity: 0;
+          transform: scale(0.96);
+        }
+        to {
+          opacity: 1;
+          transform: scale(1);
+        }
+      }
+
+      /* Custom scrollbar - minimal and clean */
+      ::-webkit-scrollbar {
+        width: 6px;
+      }
+
+      ::-webkit-scrollbar-track {
+        background: var(--primary-100);
+        border-radius: 3px;
+      }
+
+      ::-webkit-scrollbar-thumb {
+        background: linear-gradient(135deg, var(--accent-400), var(--accent-500));
+        border-radius: 3px;
+      }
+
+      ::-webkit-scrollbar-thumb:hover {
+        background: linear-gradient(135deg, var(--accent-500), var(--accent-600));
+      }
+
+      /* Mobile touch feedback */
+      @media (hover: none) and (pointer: coarse) {
+        .mobile-touch:active {
+          transform: scale(0.98);
+          transition: transform 0.1s ease;
+        }
+      }
+
+      /* Loading shimmer effect - subtle */
+      .loading-shimmer {
+        background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.6), transparent);
+        background-size: 200% 100%;
+        animation: shimmer 2s infinite;
+      }
+
+      @keyframes shimmer {
+        0% { background-position: -200% 0; }
+        100% { background-position: 200% 0; }
+      }
+
+      /* Focus states for accessibility */
+      .focus-ring:focus {
+        outline: none;
+        box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+      }
+
+      /* Ensure proper contrast in all states */
+      .contrast-text {
+        color: var(--text-primary);
+        text-shadow: 0 1px 2px rgba(255, 255, 255, 0.8);
+      }
+
+      .contrast-text-light {
+        color: var(--text-secondary);
+        text-shadow: 0 1px 2px rgba(255, 255, 255, 0.6);
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
