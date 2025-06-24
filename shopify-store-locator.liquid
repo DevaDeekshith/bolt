@@ -1,0 +1,459 @@
+{%- comment -%}
+  GudGum Store Locator Embed
+  
+  This snippet embeds the GudGum Store Locator with proper geolocation permissions
+  and cross-origin functionality for Shopify stores.
+  
+  Usage: {% render 'shopify-store-locator' %}
+  
+  Optional parameters:
+  - height: Custom height (default: 800px)
+  - title: Custom title (default: "GudGum Store Locator")
+  
+  Example with custom height:
+  {% render 'shopify-store-locator', height: '600px' %}
+{%- endcomment -%}
+
+{%- liquid
+  assign iframe_height = height | default: '800px'
+  assign iframe_title = title | default: 'GudGum Store Locator'
+  assign store_locator_url = 'https://gudgumstorelocator.vercel.app/'
+-%}
+
+<div class="gudgum-store-locator-container" data-store-locator>
+  <!-- Loading State -->
+  <div class="gudgum-loading-overlay" data-loading>
+    <div class="gudgum-loading-content">
+      <div class="gudgum-spinner"></div>
+      <p class="gudgum-loading-text">Loading Store Locator...</p>
+      <p class="gudgum-loading-subtext">Finding stores near you</p>
+    </div>
+  </div>
+
+  <!-- Error State -->
+  <div class="gudgum-error-overlay" data-error style="display: none;">
+    <div class="gudgum-error-content">
+      <div class="gudgum-error-icon">⚠️</div>
+      <h3 class="gudgum-error-title">Unable to Load Store Locator</h3>
+      <p class="gudgum-error-message">There was an issue loading the store locator. Please check your internet connection and try again.</p>
+      <button class="gudgum-retry-button" data-retry>Try Again</button>
+    </div>
+  </div>
+
+  <!-- Store Locator Iframe -->
+  <iframe
+    id="gudgum-store-locator-iframe"
+    src="{{ store_locator_url }}"
+    width="100%"
+    height="{{ iframe_height }}"
+    frameborder="0"
+    allowfullscreen
+    allow="geolocation; camera; microphone; encrypted-media; fullscreen"
+    sandbox="allow-same-origin allow-scripts allow-popups allow-forms allow-top-navigation allow-top-navigation-by-user-activation allow-downloads"
+    referrerpolicy="origin"
+    loading="lazy"
+    title="{{ iframe_title }}"
+    data-iframe
+    style="border: none; max-width: 100%; margin: 0 auto; opacity: 0; transition: opacity 0.3s ease;"
+  ></iframe>
+</div>
+
+<style>
+  .gudgum-store-locator-container {
+    position: relative;
+    width: 100%;
+    max-width: 100%;
+    margin: 0 auto;
+    background: linear-gradient(180deg, #ffffff 0%, #f8fafc 25%, #f1f5f9 50%, #e6f3ff 100%);
+    border-radius: 16px;
+    overflow: hidden;
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+  }
+
+  .gudgum-loading-overlay,
+  .gudgum-error-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(8px);
+    z-index: 10;
+    min-height: {{ iframe_height }};
+  }
+
+  .gudgum-loading-content,
+  .gudgum-error-content {
+    text-align: center;
+    padding: 2rem;
+    max-width: 400px;
+  }
+
+  .gudgum-spinner {
+    width: 48px;
+    height: 48px;
+    border: 4px solid #e2e8f0;
+    border-top: 4px solid #3f805a;
+    border-radius: 50%;
+    animation: gudgum-spin 1s linear infinite;
+    margin: 0 auto 1.5rem;
+  }
+
+  @keyframes gudgum-spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+  }
+
+  .gudgum-loading-text {
+    font-size: 1.125rem;
+    font-weight: 600;
+    color: #1e293b;
+    margin: 0 0 0.5rem;
+  }
+
+  .gudgum-loading-subtext {
+    font-size: 0.875rem;
+    color: #64748b;
+    margin: 0;
+  }
+
+  .gudgum-error-icon {
+    font-size: 3rem;
+    margin-bottom: 1rem;
+  }
+
+  .gudgum-error-title {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: #dc2626;
+    margin: 0 0 1rem;
+  }
+
+  .gudgum-error-message {
+    font-size: 0.875rem;
+    color: #64748b;
+    line-height: 1.5;
+    margin: 0 0 1.5rem;
+  }
+
+  .gudgum-retry-button {
+    background: linear-gradient(135deg, #3f805a, #2d5a3f);
+    color: white;
+    border: none;
+    padding: 0.75rem 1.5rem;
+    border-radius: 8px;
+    font-size: 0.875rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 8px rgba(63, 128, 90, 0.2);
+  }
+
+  .gudgum-retry-button:hover {
+    background: linear-gradient(135deg, #2d5a3f, #1e3d2a);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 16px rgba(63, 128, 90, 0.3);
+  }
+
+  .gudgum-retry-button:active {
+    transform: translateY(0);
+  }
+
+  /* Responsive Design */
+  @media (max-width: 768px) {
+    .gudgum-store-locator-container {
+      border-radius: 12px;
+      margin: 0 -1rem;
+    }
+    
+    .gudgum-loading-content,
+    .gudgum-error-content {
+      padding: 1.5rem;
+    }
+    
+    .gudgum-spinner {
+      width: 40px;
+      height: 40px;
+    }
+  }
+
+  /* Accessibility */
+  @media (prefers-reduced-motion: reduce) {
+    .gudgum-spinner {
+      animation: none;
+      border-top-color: #3f805a;
+    }
+    
+    .gudgum-store-locator-container iframe {
+      transition: none;
+    }
+  }
+
+  /* High contrast mode support */
+  @media (prefers-contrast: high) {
+    .gudgum-store-locator-container {
+      border: 2px solid #000;
+    }
+    
+    .gudgum-loading-text,
+    .gudgum-error-title {
+      color: #000;
+    }
+  }
+</style>
+
+<script>
+  (function() {
+    'use strict';
+    
+    // Store locator management
+    class GudGumStoreLocator {
+      constructor(container) {
+        this.container = container;
+        this.iframe = container.querySelector('[data-iframe]');
+        this.loadingOverlay = container.querySelector('[data-loading]');
+        this.errorOverlay = container.querySelector('[data-error]');
+        this.retryButton = container.querySelector('[data-retry]');
+        
+        this.loadTimeout = null;
+        this.maxRetries = 3;
+        this.currentRetries = 0;
+        
+        this.init();
+      }
+      
+      init() {
+        this.bindEvents();
+        this.startLoadTimeout();
+      }
+      
+      bindEvents() {
+        // Iframe load events
+        this.iframe.addEventListener('load', () => this.handleLoad());
+        this.iframe.addEventListener('error', () => this.handleError());
+        
+        // Retry button
+        if (this.retryButton) {
+          this.retryButton.addEventListener('click', () => this.retry());
+        }
+        
+        // Handle iframe communication for geolocation
+        window.addEventListener('message', (event) => this.handleMessage(event));
+        
+        // Visibility change handling
+        document.addEventListener('visibilitychange', () => this.handleVisibilityChange());
+      }
+      
+      startLoadTimeout() {
+        // Clear existing timeout
+        if (this.loadTimeout) {
+          clearTimeout(this.loadTimeout);
+        }
+        
+        // Set timeout for iframe loading
+        this.loadTimeout = setTimeout(() => {
+          if (this.loadingOverlay.style.display !== 'none') {
+            console.warn('GudGum Store Locator: Load timeout exceeded');
+            this.handleError('Loading timeout exceeded');
+          }
+        }, 15000); // 15 second timeout
+      }
+      
+      handleLoad() {
+        console.log('GudGum Store Locator: Iframe loaded successfully');
+        
+        // Clear timeout
+        if (this.loadTimeout) {
+          clearTimeout(this.loadTimeout);
+        }
+        
+        // Hide loading overlay
+        this.loadingOverlay.style.display = 'none';
+        
+        // Show iframe with fade-in effect
+        this.iframe.style.opacity = '1';
+        
+        // Reset retry counter
+        this.currentRetries = 0;
+        
+        // Send initial message to iframe about parent capabilities
+        this.sendMessageToIframe({
+          type: 'PARENT_READY',
+          capabilities: {
+            geolocation: 'geolocation' in navigator,
+            https: location.protocol === 'https:',
+            embedded: window !== window.top
+          }
+        });
+      }
+      
+      handleError(errorMessage = 'Failed to load store locator') {
+        console.error('GudGum Store Locator: Error -', errorMessage);
+        
+        // Clear timeout
+        if (this.loadTimeout) {
+          clearTimeout(this.loadTimeout);
+        }
+        
+        // Hide loading overlay
+        this.loadingOverlay.style.display = 'none';
+        
+        // Show error overlay
+        this.errorOverlay.style.display = 'flex';
+        
+        // Update error message if custom message provided
+        const errorMessageElement = this.errorOverlay.querySelector('.gudgum-error-message');
+        if (errorMessageElement && errorMessage !== 'Failed to load store locator') {
+          errorMessageElement.textContent = errorMessage;
+        }
+      }
+      
+      retry() {
+        if (this.currentRetries >= this.maxRetries) {
+          console.warn('GudGum Store Locator: Maximum retries exceeded');
+          return;
+        }
+        
+        this.currentRetries++;
+        console.log(`GudGum Store Locator: Retry attempt ${this.currentRetries}/${this.maxRetries}`);
+        
+        // Hide error overlay
+        this.errorOverlay.style.display = 'none';
+        
+        // Show loading overlay
+        this.loadingOverlay.style.display = 'flex';
+        
+        // Reset iframe opacity
+        this.iframe.style.opacity = '0';
+        
+        // Reload iframe by changing src
+        const currentSrc = this.iframe.src;
+        const separator = currentSrc.includes('?') ? '&' : '?';
+        this.iframe.src = currentSrc + separator + 'retry=' + Date.now();
+        
+        // Start new timeout
+        this.startLoadTimeout();
+      }
+      
+      handleMessage(event) {
+        // Verify origin for security
+        const allowedOrigins = [
+          'https://gudgumstorelocator.vercel.app',
+          'https://localhost:5173',
+          'http://localhost:5173'
+        ];
+        
+        if (!allowedOrigins.includes(event.origin)) {
+          return;
+        }
+        
+        const data = event.data;
+        
+        switch (data.type) {
+          case 'GEOLOCATION_REQUEST':
+            this.handleGeolocationRequest(data);
+            break;
+          case 'IFRAME_READY':
+            console.log('GudGum Store Locator: Iframe reports ready');
+            break;
+          case 'ERROR':
+            console.error('GudGum Store Locator: Iframe error -', data.message);
+            break;
+        }
+      }
+      
+      handleGeolocationRequest(data) {
+        if (!('geolocation' in navigator)) {
+          this.sendMessageToIframe({
+            type: 'GEOLOCATION_ERROR',
+            requestId: data.requestId,
+            error: 'Geolocation not supported'
+          });
+          return;
+        }
+        
+        const options = data.options || {
+          enableHighAccuracy: true,
+          timeout: 30000,
+          maximumAge: 300000
+        };
+        
+        navigator.geolocation.getCurrentPosition(
+          (position) => {
+            this.sendMessageToIframe({
+              type: 'GEOLOCATION_SUCCESS',
+              requestId: data.requestId,
+              position: {
+                coords: {
+                  latitude: position.coords.latitude,
+                  longitude: position.coords.longitude,
+                  accuracy: position.coords.accuracy
+                },
+                timestamp: position.timestamp
+              }
+            });
+          },
+          (error) => {
+            this.sendMessageToIframe({
+              type: 'GEOLOCATION_ERROR',
+              requestId: data.requestId,
+              error: {
+                code: error.code,
+                message: error.message
+              }
+            });
+          },
+          options
+        );
+      }
+      
+      sendMessageToIframe(message) {
+        if (this.iframe && this.iframe.contentWindow) {
+          this.iframe.contentWindow.postMessage(message, 'https://gudgumstorelocator.vercel.app');
+        }
+      }
+      
+      handleVisibilityChange() {
+        if (document.hidden) {
+          // Page is hidden, pause any ongoing operations
+          if (this.loadTimeout) {
+            clearTimeout(this.loadTimeout);
+          }
+        } else {
+          // Page is visible again, resume if needed
+          if (this.loadingOverlay.style.display !== 'none') {
+            this.startLoadTimeout();
+          }
+        }
+      }
+    }
+    
+    // Initialize store locator when DOM is ready
+    function initStoreLocator() {
+      const containers = document.querySelectorAll('[data-store-locator]');
+      containers.forEach(container => {
+        new GudGumStoreLocator(container);
+      });
+    }
+    
+    // Initialize
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', initStoreLocator);
+    } else {
+      initStoreLocator();
+    }
+    
+    // Global error handling
+    window.addEventListener('error', function(event) {
+      if (event.target && event.target.id === 'gudgum-store-locator-iframe') {
+        console.error('GudGum Store Locator: Global iframe error', event);
+      }
+    });
+    
+  })();
+</script>
