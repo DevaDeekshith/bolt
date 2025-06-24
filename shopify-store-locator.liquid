@@ -1,5 +1,5 @@
 {%- comment -%}
-  GudGum Store Locator Embed for Shopify
+  GudGum Store Locator Embed for Shopify - Fixed for Google Maps Integration
   
   This snippet embeds the GudGum Store Locator with proper security headers
   and cross-origin functionality for Shopify stores.
@@ -17,7 +17,7 @@
 {%- liquid
   assign iframe_height = height | default: '800px'
   assign iframe_title = title | default: 'GudGum Store Locator'
-  assign store_locator_url = 'https://gudgumstorelocator.vercel.app/'
+  assign store_locator_url = 'https://effulgent-pixie-63704f.netlify.app/'
 -%}
 
 <div class="gudgum-store-locator-container" data-store-locator>
@@ -40,7 +40,7 @@
     </div>
   </div>
 
-  <!-- Store Locator Iframe with Enhanced Security -->
+  <!-- Store Locator Iframe with Enhanced Security for Shopify -->
   <iframe
     id="gudgum-store-locator-iframe"
     src="{{ store_locator_url }}"
@@ -49,7 +49,7 @@
     frameborder="0"
     allowfullscreen
     allow="geolocation; camera; microphone; encrypted-media; fullscreen"
-    sandbox="allow-same-origin allow-scripts allow-popups allow-forms allow-top-navigation allow-top-navigation-by-user-activation allow-downloads"
+    sandbox="allow-same-origin allow-scripts allow-popups allow-forms allow-top-navigation allow-top-navigation-by-user-activation allow-downloads allow-popups-to-escape-sandbox"
     referrerpolicy="origin-when-cross-origin"
     loading="lazy"
     title="{{ iframe_title }}"
@@ -57,6 +57,19 @@
     style="border: none; max-width: 100%; margin: 0 auto; opacity: 0; transition: opacity 0.3s ease;"
   ></iframe>
 </div>
+
+<!-- Critical: Add CSP meta tag to allow Google Maps -->
+<meta http-equiv="Content-Security-Policy" content="
+  default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob:;
+  script-src 'self' 'unsafe-inline' 'unsafe-eval' *.googleapis.com *.google.com *.gstatic.com *.googletagmanager.com *.netlify.app;
+  style-src 'self' 'unsafe-inline' *.googleapis.com *.gstatic.com fonts.googleapis.com;
+  img-src 'self' data: blob: *.googleapis.com *.gstatic.com *.google.com *.googleusercontent.com *.netlify.app;
+  connect-src 'self' *.googleapis.com *.google.com *.gstatic.com api.olamaps.io *.netlify.app;
+  frame-src 'self' *.google.com *.googleapis.com *.netlify.app;
+  font-src 'self' fonts.googleapis.com fonts.gstatic.com;
+  object-src 'none';
+  base-uri 'self';
+">
 
 <style>
   .gudgum-store-locator-container {
@@ -211,7 +224,7 @@
   (function() {
     'use strict';
     
-    // Store locator management with enhanced security and navigation support
+    // Store locator management with enhanced security and navigation support for Shopify
     class GudGumStoreLocator {
       constructor(container) {
         this.container = container;
@@ -230,7 +243,7 @@
       init() {
         this.bindEvents();
         this.startLoadTimeout();
-        this.setupSecurityHeaders();
+        this.setupShopifyCompatibility();
       }
       
       bindEvents() {
@@ -250,16 +263,19 @@
         document.addEventListener('visibilitychange', () => this.handleVisibilityChange());
       }
       
-      setupSecurityHeaders() {
-        // Add security attributes to prevent www.google.com blocking
+      setupShopifyCompatibility() {
+        // Enhanced security attributes for Shopify compatibility
         this.iframe.setAttribute('referrerpolicy', 'origin-when-cross-origin');
-        this.iframe.setAttribute('sandbox', 'allow-same-origin allow-scripts allow-popups allow-forms allow-top-navigation allow-top-navigation-by-user-activation allow-downloads');
+        this.iframe.setAttribute('sandbox', 'allow-same-origin allow-scripts allow-popups allow-forms allow-top-navigation allow-top-navigation-by-user-activation allow-downloads allow-popups-to-escape-sandbox');
         
-        // Set proper CORS headers for navigation
-        const meta = document.createElement('meta');
-        meta.httpEquiv = 'Content-Security-Policy';
-        meta.content = "frame-ancestors 'self' *.shopify.com *.myshopify.com; connect-src 'self' https://maps.googleapis.com https://maps.google.com https://accounts.google.com https://api.olamaps.io;";
-        document.head.appendChild(meta);
+        // Add Shopify-specific CSP allowances
+        const existingMeta = document.querySelector('meta[http-equiv="Content-Security-Policy"]');
+        if (!existingMeta) {
+          const meta = document.createElement('meta');
+          meta.httpEquiv = 'Content-Security-Policy';
+          meta.content = "frame-ancestors 'self' *.shopify.com *.myshopify.com; connect-src 'self' https://maps.googleapis.com https://maps.google.com https://accounts.google.com https://api.olamaps.io https://effulgent-pixie-63704f.netlify.app;";
+          document.head.appendChild(meta);
+        }
       }
       
       startLoadTimeout() {
@@ -301,7 +317,8 @@
             geolocation: 'geolocation' in navigator,
             https: location.protocol === 'https:',
             embedded: window !== window.top,
-            shopify: true
+            shopify: true,
+            domain: window.location.hostname
           }
         });
       }
@@ -348,16 +365,16 @@
         // Reload iframe by changing src
         const currentSrc = this.iframe.src;
         const separator = currentSrc.includes('?') ? '&' : '?';
-        this.iframe.src = currentSrc + separator + 'retry=' + Date.now();
+        this.iframe.src = currentSrc + separator + 'retry=' + Date.now() + '&shopify=true';
         
         // Start new timeout
         this.startLoadTimeout();
       }
       
       handleMessage(event) {
-        // Verify origin for security - allow both production and development
+        // Enhanced origin verification for Shopify
         const allowedOrigins = [
-          'https://gudgumstorelocator.vercel.app',
+          'https://effulgent-pixie-63704f.netlify.app',
           'https://localhost:5173',
           'http://localhost:5173',
           'http://localhost:3000',
@@ -433,32 +450,50 @@
       }
       
       handleNavigationRequest(data) {
-        // Handle navigation requests from the iframe
-        // This helps avoid popup blocking by opening from the parent window
+        // Enhanced navigation handling for Shopify with proper address filling
         try {
-          const { url, target = '_blank' } = data;
+          const { url, target = '_blank', address, storeName } = data;
           
           if (!url) {
             console.error('Navigation request missing URL');
             return;
           }
           
-          // Validate URL for security
-          if (!url.startsWith('https://maps.google.com') && 
-              !url.startsWith('https://www.google.com/maps') &&
-              !url.startsWith('comgooglemaps://') &&
-              !url.startsWith('intent://')) {
+          // Enhanced URL validation for Google Maps with address support
+          const isGoogleMapsUrl = url.includes('maps.google.com') || 
+                                 url.includes('www.google.com/maps') ||
+                                 url.includes('comgooglemaps://') ||
+                                 url.includes('intent://');
+          
+          if (!isGoogleMapsUrl) {
             console.error('Navigation URL not allowed:', url);
             return;
           }
           
-          // Open navigation URL
-          if (url.startsWith('comgooglemaps://') || url.startsWith('intent://')) {
-            // Mobile app deep links
-            window.location.href = url;
+          // Enhanced URL with proper address filling
+          let enhancedUrl = url;
+          if (address && storeName) {
+            // Ensure the URL includes both store name and address for better auto-filling
+            const addressParam = encodeURIComponent(`${storeName}, ${address}`);
+            if (url.includes('destination=')) {
+              enhancedUrl = url.replace(/destination=[^&]*/, `destination=${addressParam}`);
+            } else if (url.includes('daddr=')) {
+              enhancedUrl = url.replace(/daddr=[^&]*/, `daddr=${addressParam}`);
+            }
+          }
+          
+          // Open navigation URL with enhanced compatibility
+          if (enhancedUrl.startsWith('comgooglemaps://') || enhancedUrl.startsWith('intent://')) {
+            // Mobile app deep links - use location.href for better compatibility
+            window.location.href = enhancedUrl;
           } else {
-            // Web URLs
-            window.open(url, target, 'noopener,noreferrer');
+            // Web URLs - use window.open with enhanced parameters
+            const newWindow = window.open(enhancedUrl, target, 'noopener,noreferrer,popup=yes');
+            
+            // Fallback if popup is blocked
+            if (!newWindow || newWindow.closed || typeof newWindow.closed == 'undefined') {
+              window.location.href = enhancedUrl;
+            }
           }
           
           this.sendMessageToIframe({
@@ -478,7 +513,7 @@
       
       sendMessageToIframe(message) {
         if (this.iframe && this.iframe.contentWindow) {
-          this.iframe.contentWindow.postMessage(message, 'https://gudgumstorelocator.vercel.app');
+          this.iframe.contentWindow.postMessage(message, 'https://effulgent-pixie-63704f.netlify.app');
         }
       }
       
@@ -512,7 +547,7 @@
       initStoreLocator();
     }
     
-    // Global error handling
+    // Global error handling for Shopify compatibility
     window.addEventListener('error', function(event) {
       if (event.target && event.target.id === 'gudgum-store-locator-iframe') {
         console.error('GudGum Store Locator: Global iframe error', event);
