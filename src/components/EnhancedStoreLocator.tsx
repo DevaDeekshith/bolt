@@ -227,42 +227,7 @@ export const EnhancedStoreLocator: React.FC = () => {
     };
   }, [handleStoreInsert, handleStoreUpdate, handleStoreDelete]);
 
-  // Enhanced filtering and sorting with performance optimization
-  const effectiveLocation = searchLocation || userLocation;
-  
-  const processedStores = useMemo(() => {
-    let processed = [...stores];
-
-    // Add distances if we have a reference location
-    if (effectiveLocation) {
-      processed = LocationService.calculateDistancesForStores(processed, effectiveLocation);
-    }
-
-    // Apply search filter with sanitization
-    if (searchQuery.trim()) {
-      const sanitizedQuery = SecurityUtils.sanitizeSearchQuery(searchQuery);
-      if (sanitizedQuery) {
-        const query = sanitizedQuery.toLowerCase();
-        processed = processed.filter(store =>
-          store.name.toLowerCase().includes(query) ||
-          store.location.toLowerCase().includes(query)
-        );
-      }
-    }
-
-    // Apply filters
-    processed = applyFilters(processed, filters, effectiveLocation);
-
-    // Sort stores
-    processed = sortStores(processed, filters.sortBy);
-
-    return processed;
-  }, [stores, searchQuery, filters, effectiveLocation]);
-
-  useEffect(() => {
-    setFilteredStores(processedStores);
-  }, [processedStores]);
-
+  // Define filter and sort functions before they are used
   const applyFilters = useCallback((storeList: Store[], currentFilters: StoreFilters, effectiveLocation: UserLocation | undefined): Store[] => {
     let filtered = [...storeList];
 
@@ -306,6 +271,42 @@ export const EnhancedStoreLocator: React.FC = () => {
         return sorted;
     }
   }, []);
+
+  // Enhanced filtering and sorting with performance optimization
+  const effectiveLocation = searchLocation || userLocation;
+  
+  const processedStores = useMemo(() => {
+    let processed = [...stores];
+
+    // Add distances if we have a reference location
+    if (effectiveLocation) {
+      processed = LocationService.calculateDistancesForStores(processed, effectiveLocation);
+    }
+
+    // Apply search filter with sanitization
+    if (searchQuery.trim()) {
+      const sanitizedQuery = SecurityUtils.sanitizeSearchQuery(searchQuery);
+      if (sanitizedQuery) {
+        const query = sanitizedQuery.toLowerCase();
+        processed = processed.filter(store =>
+          store.name.toLowerCase().includes(query) ||
+          store.location.toLowerCase().includes(query)
+        );
+      }
+    }
+
+    // Apply filters
+    processed = applyFilters(processed, filters, effectiveLocation);
+
+    // Sort stores
+    processed = sortStores(processed, filters.sortBy);
+
+    return processed;
+  }, [stores, searchQuery, filters, effectiveLocation, applyFilters, sortStores]);
+
+  useEffect(() => {
+    setFilteredStores(processedStores);
+  }, [processedStores]);
 
   const loadStoresData = async () => {
     try {
