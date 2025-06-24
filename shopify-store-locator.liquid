@@ -17,7 +17,7 @@
 {%- liquid
   assign iframe_height = height | default: '800px'
   assign iframe_title = title | default: 'GudGum Store Locator'
-  assign store_locator_url = 'https://effulgent-pixie-63704f.netlify.app/'
+  assign store_locator_url = 'https://gud-locator.vercel.app/'
 -%}
 
 <div class="gudgum-store-locator-container" data-store-locator>
@@ -61,11 +61,11 @@
 <!-- Critical: Add CSP meta tag to allow Google Maps -->
 <meta http-equiv="Content-Security-Policy" content="
   default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob:;
-  script-src 'self' 'unsafe-inline' 'unsafe-eval' *.googleapis.com *.google.com *.gstatic.com *.googletagmanager.com *.netlify.app;
+  script-src 'self' 'unsafe-inline' 'unsafe-eval' *.googleapis.com *.google.com *.gstatic.com *.googletagmanager.com *.vercel.app;
   style-src 'self' 'unsafe-inline' *.googleapis.com *.gstatic.com fonts.googleapis.com;
-  img-src 'self' data: blob: *.googleapis.com *.gstatic.com *.google.com *.googleusercontent.com *.netlify.app;
-  connect-src 'self' *.googleapis.com *.google.com *.gstatic.com api.olamaps.io *.netlify.app;
-  frame-src 'self' *.google.com *.googleapis.com *.netlify.app;
+  img-src 'self' data: blob: *.googleapis.com *.gstatic.com *.google.com *.googleusercontent.com *.vercel.app;
+  connect-src 'self' *.googleapis.com *.google.com *.gstatic.com api.olamaps.io *.vercel.app;
+  frame-src 'self' *.google.com *.googleapis.com *.vercel.app;
   font-src 'self' fonts.googleapis.com fonts.gstatic.com;
   object-src 'none';
   base-uri 'self';
@@ -273,7 +273,7 @@
         if (!existingMeta) {
           const meta = document.createElement('meta');
           meta.httpEquiv = 'Content-Security-Policy';
-          meta.content = "frame-ancestors 'self' *.shopify.com *.myshopify.com; connect-src 'self' https://maps.googleapis.com https://maps.google.com https://accounts.google.com https://api.olamaps.io https://effulgent-pixie-63704f.netlify.app;";
+          meta.content = "frame-ancestors 'self' *.shopify.com *.myshopify.com; connect-src 'self' https://maps.googleapis.com https://maps.google.com https://accounts.google.com https://api.olamaps.io https://gud-locator.vercel.app;";
           document.head.appendChild(meta);
         }
       }
@@ -374,7 +374,7 @@
       handleMessage(event) {
         // Enhanced origin verification for Shopify
         const allowedOrigins = [
-          'https://effulgent-pixie-63704f.netlify.app',
+          'https://gud-locator.vercel.app',
           'https://localhost:5173',
           'http://localhost:5173',
           'http://localhost:3000',
@@ -513,7 +513,7 @@
       
       sendMessageToIframe(message) {
         if (this.iframe && this.iframe.contentWindow) {
-          this.iframe.contentWindow.postMessage(message, 'https://effulgent-pixie-63704f.netlify.app');
+          this.iframe.contentWindow.postMessage(message, 'https://gud-locator.vercel.app');
         }
       }
       
