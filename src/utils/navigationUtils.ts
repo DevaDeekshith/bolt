@@ -7,8 +7,6 @@ export interface NavigationOptions {
 }
 
 export class NavigationService {
-  private static readonly GOOGLE_MAPS_API_KEY = 'AIzaSyD7Ysp1nlJR5E_TfM5SxM0LVJoZB9QmNzE';
-
   /**
    * Detect if the user is on a mobile device
    */
@@ -43,100 +41,53 @@ export class NavigationService {
   }
 
   /**
-   * Check if Google Maps app is likely installed (best effort detection)
-   */
-  static async isGoogleMapsAppAvailable(): Promise<boolean> {
-    return new Promise((resolve) => {
-      if (!this.isMobileDevice()) {
-        resolve(false);
-        return;
-      }
-
-      const platform = this.getMobilePlatform();
-      
-      // Create a test link to check if the app can handle it
-      const testUrl = platform === 'ios' 
-        ? 'comgooglemaps://' 
-        : 'geo:0,0?q=test';
-      
-      const iframe = document.createElement('iframe');
-      iframe.style.display = 'none';
-      iframe.src = testUrl;
-      
-      let resolved = false;
-      
-      // Timeout to assume app is not available
-      const timeout = setTimeout(() => {
-        if (!resolved) {
-          resolved = true;
-          resolve(false);
-        }
-        document.body.removeChild(iframe);
-      }, 1000);
-      
-      // If the app opens, we won't reach this point quickly
-      iframe.onload = () => {
-        if (!resolved) {
-          resolved = true;
-          clearTimeout(timeout);
-          resolve(true);
-          document.body.removeChild(iframe);
-        }
-      };
-      
-      document.body.appendChild(iframe);
-    });
-  }
-
-  /**
-   * Generate Google Maps web URL
+   * Generate Google Maps web URL with proper address filling
    */
   static generateWebMapsUrl(options: NavigationOptions): string {
     const { origin, destination, destinationName } = options;
     
+    // Create a comprehensive destination string that includes both name and coordinates
+    let destinationParam = '';
+    if (destinationName) {
+      // Include both the name and coordinates for better accuracy
+      destinationParam = `${encodeURIComponent(destinationName)}/@${destination.lat},${destination.lng}`;
+    } else {
+      destinationParam = `${destination.lat},${destination.lng}`;
+    }
+
     const params = new URLSearchParams({
       api: '1',
       origin: `${origin.lat},${origin.lng}`,
-      destination: destinationName 
-        ? `${destinationName}` 
-        : `${destination.lat},${destination.lng}`,
+      destination: destinationParam,
       travelmode: 'driving'
     });
-
-    // Add API key if available
-    if (this.GOOGLE_MAPS_API_KEY) {
-      params.append('key', this.GOOGLE_MAPS_API_KEY);
-    }
 
     return `https://www.google.com/maps/dir/?${params.toString()}`;
   }
 
   /**
-   * Generate mobile app deep link URL
+   * Generate mobile app deep link URL with proper address filling
    */
   static generateMobileAppUrl(options: NavigationOptions): string {
-    const { origin, destination } = options;
+    const { origin, destination, destinationName } = options;
     const platform = this.getMobilePlatform();
     
     if (platform === 'ios') {
-      // iOS Google Maps app URL scheme
+      // iOS Google Maps app URL scheme with proper address
       const params = new URLSearchParams({
         saddr: `${origin.lat},${origin.lng}`,
-        daddr: `${destination.lat},${destination.lng}`,
+        daddr: destinationName ? `${destinationName}` : `${destination.lat},${destination.lng}`,
         directionsmode: 'driving'
       });
       
       return `comgooglemaps://?${params.toString()}`;
     } else {
-      // Android Google Maps app URL scheme
-      const params = new URLSearchParams({
-        api: '1',
-        origin: `${origin.lat},${origin.lng}`,
-        destination: `${destination.lat},${destination.lng}`,
-        travelmode: 'driving'
-      });
+      // Android - use intent URL that properly fills the address
+      const destinationString = destinationName 
+        ? encodeURIComponent(destinationName)
+        : `${destination.lat},${destination.lng}`;
       
-      return `https://www.google.com/maps/dir/?${params.toString()}`;
+      return `intent://maps.google.com/maps/dir/${origin.lat},${origin.lng}/${destinationString}/@${destination.lat},${destination.lng},15z/data=!4m2!4m1!3e0#Intent;scheme=https;package=com.google.android.apps.maps;end`;
     }
   }
 
@@ -154,29 +105,31 @@ export class NavigationService {
       if (isMobile) {
         // Try mobile app first
         const appUrl = this.generateMobileAppUrl(options);
-        const webUrl = this.generateWebMapsUrl(options);
         
         try {
-          // Attempt to open the app
-          const appAvailable = await this.isGoogleMapsAppAvailable();
+          // For mobile, try to open the app directly
+          window.location.href = appUrl;
           
-          if (appAvailable) {
-            window.location.href = appUrl;
-            return { success: true, method: 'app' };
-          } else {
-            // Fallback to web version
-            window.open(webUrl, '_blank', 'noopener,noreferrer');
-            return { success: true, method: 'fallback' };
-          }
+          // Wait a moment to see if the app opens
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          
+          return { success: true, method: 'app' };
         } catch (error) {
           // Fallback to web version
+          const webUrl = this.generateWebMapsUrl(options);
           window.open(webUrl, '_blank', 'noopener,noreferrer');
           return { success: true, method: 'fallback' };
         }
       } else {
-        // Desktop - open web version
+        // Desktop - open web version in new tab
         const webUrl = this.generateWebMapsUrl(options);
-        window.open(webUrl, '_blank', 'noopener,noreferrer');
+        const newWindow = window.open(webUrl, '_blank', 'noopener,noreferrer');
+        
+        if (!newWindow) {
+          // If popup is blocked, try to navigate in same tab
+          window.location.href = webUrl;
+        }
+        
         return { success: true, method: 'web' };
       }
     } catch (error) {
@@ -261,7 +214,7 @@ export class NavigationService {
         const methodText = {
           'web': 'Google Maps (Web)',
           'app': 'Google Maps App',
-          'fallback': 'Google Maps (Web Fallback)'
+          'fallback': 'Google Maps (Web)'
         }[result.method];
         
         onStatusUpdate?.(`Opened in ${methodText}`);

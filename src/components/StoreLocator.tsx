@@ -292,15 +292,14 @@ export const StoreLocator: React.FC = () => {
       },
       {
         enableHighAccuracy: true,
-        timeout: 30000, // Increased from 10000 to 30000 (30 seconds)
-        maximumAge: 300000 // 5 minutes
+        timeout: 30000,
+        maximumAge: 300000
       }
     );
   };
 
   const reverseGeocode = async (location: UserLocation) => {
     try {
-      // Simple reverse geocoding - in a real app, you'd use a proper reverse geocoding service
       setLocationQuery(`${location.lat.toFixed(4)}, ${location.lng.toFixed(4)}`);
     } catch (error) {
       console.error('Reverse geocoding error:', error);
@@ -322,7 +321,7 @@ export const StoreLocator: React.FC = () => {
     setNavigationStatus('');
 
     try {
-      // Use the new NavigationService for better device-specific handling
+      // Use the NavigationService for better device-specific handling
       await NavigationService.handleNavigation(
         {
           lat: store.lat,
@@ -436,8 +435,8 @@ export const StoreLocator: React.FC = () => {
               className="w-16 h-16 mx-auto rounded-xl shadow-sm"
             />
           </div>
-          <LoadingSpinner message="Loading store locations..." />
-          <p className="text-body mt-4">Discovering stores near you...</p>
+          <LoadingSpinner message="Finding stores near you..." />
+          <p className="text-body mt-4">Please wait while we locate the best stores for you</p>
         </div>
       </div>
     );
@@ -453,7 +452,7 @@ export const StoreLocator: React.FC = () => {
             className="w-12 h-12 mx-auto rounded-xl shadow-sm mb-6"
           />
           <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
-          <h2 className="text-xl font-semibold text-heading mb-2">Database Connection Issue</h2>
+          <h2 className="text-xl font-semibold text-heading mb-2">Unable to Load Stores</h2>
           <p className="text-body mb-6">{error}</p>
           
           <div className="space-y-3">
@@ -484,7 +483,7 @@ export const StoreLocator: React.FC = () => {
             </div>
             <div className="flex-1">
               <h1 className="text-2xl sm:text-3xl font-bold contrast-text">
-                Store Locator
+                GudGum Store Locator
               </h1>
               <p className="contrast-text-light text-sm sm:text-base mt-1">
                 Find GudGum stores near you with smart navigation

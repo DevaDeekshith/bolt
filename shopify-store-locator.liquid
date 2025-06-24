@@ -1,7 +1,7 @@
 {%- comment -%}
-  GudGum Store Locator Embed
+  GudGum Store Locator Embed for Shopify
   
-  This snippet embeds the GudGum Store Locator with proper geolocation permissions
+  This snippet embeds the GudGum Store Locator with proper security headers
   and cross-origin functionality for Shopify stores.
   
   Usage: {% render 'shopify-store-locator' %}
@@ -40,7 +40,7 @@
     </div>
   </div>
 
-  <!-- Store Locator Iframe -->
+  <!-- Store Locator Iframe with Enhanced Security -->
   <iframe
     id="gudgum-store-locator-iframe"
     src="{{ store_locator_url }}"
@@ -50,7 +50,7 @@
     allowfullscreen
     allow="geolocation; camera; microphone; encrypted-media; fullscreen"
     sandbox="allow-same-origin allow-scripts allow-popups allow-forms allow-top-navigation allow-top-navigation-by-user-activation allow-downloads"
-    referrerpolicy="origin"
+    referrerpolicy="origin-when-cross-origin"
     loading="lazy"
     title="{{ iframe_title }}"
     data-iframe
@@ -211,7 +211,7 @@
   (function() {
     'use strict';
     
-    // Store locator management
+    // Store locator management with enhanced security and navigation support
     class GudGumStoreLocator {
       constructor(container) {
         this.container = container;
@@ -230,6 +230,7 @@
       init() {
         this.bindEvents();
         this.startLoadTimeout();
+        this.setupSecurityHeaders();
       }
       
       bindEvents() {
@@ -242,11 +243,23 @@
           this.retryButton.addEventListener('click', () => this.retry());
         }
         
-        // Handle iframe communication for geolocation
+        // Handle iframe communication for navigation and geolocation
         window.addEventListener('message', (event) => this.handleMessage(event));
         
         // Visibility change handling
         document.addEventListener('visibilitychange', () => this.handleVisibilityChange());
+      }
+      
+      setupSecurityHeaders() {
+        // Add security attributes to prevent www.google.com blocking
+        this.iframe.setAttribute('referrerpolicy', 'origin-when-cross-origin');
+        this.iframe.setAttribute('sandbox', 'allow-same-origin allow-scripts allow-popups allow-forms allow-top-navigation allow-top-navigation-by-user-activation allow-downloads');
+        
+        // Set proper CORS headers for navigation
+        const meta = document.createElement('meta');
+        meta.httpEquiv = 'Content-Security-Policy';
+        meta.content = "frame-ancestors 'self' *.shopify.com *.myshopify.com; connect-src 'self' https://maps.googleapis.com https://maps.google.com https://accounts.google.com https://api.olamaps.io;";
+        document.head.appendChild(meta);
       }
       
       startLoadTimeout() {
@@ -287,7 +300,8 @@
           capabilities: {
             geolocation: 'geolocation' in navigator,
             https: location.protocol === 'https:',
-            embedded: window !== window.top
+            embedded: window !== window.top,
+            shopify: true
           }
         });
       }
@@ -341,14 +355,17 @@
       }
       
       handleMessage(event) {
-        // Verify origin for security
+        // Verify origin for security - allow both production and development
         const allowedOrigins = [
           'https://gudgumstorelocator.vercel.app',
           'https://localhost:5173',
-          'http://localhost:5173'
+          'http://localhost:5173',
+          'http://localhost:3000',
+          'https://localhost:3000'
         ];
         
         if (!allowedOrigins.includes(event.origin)) {
+          console.warn('GudGum Store Locator: Message from unauthorized origin:', event.origin);
           return;
         }
         
@@ -357,6 +374,9 @@
         switch (data.type) {
           case 'GEOLOCATION_REQUEST':
             this.handleGeolocationRequest(data);
+            break;
+          case 'NAVIGATION_REQUEST':
+            this.handleNavigationRequest(data);
             break;
           case 'IFRAME_READY':
             console.log('GudGum Store Locator: Iframe reports ready');
@@ -410,6 +430,50 @@
           },
           options
         );
+      }
+      
+      handleNavigationRequest(data) {
+        // Handle navigation requests from the iframe
+        // This helps avoid popup blocking by opening from the parent window
+        try {
+          const { url, target = '_blank' } = data;
+          
+          if (!url) {
+            console.error('Navigation request missing URL');
+            return;
+          }
+          
+          // Validate URL for security
+          if (!url.startsWith('https://maps.google.com') && 
+              !url.startsWith('https://www.google.com/maps') &&
+              !url.startsWith('comgooglemaps://') &&
+              !url.startsWith('intent://')) {
+            console.error('Navigation URL not allowed:', url);
+            return;
+          }
+          
+          // Open navigation URL
+          if (url.startsWith('comgooglemaps://') || url.startsWith('intent://')) {
+            // Mobile app deep links
+            window.location.href = url;
+          } else {
+            // Web URLs
+            window.open(url, target, 'noopener,noreferrer');
+          }
+          
+          this.sendMessageToIframe({
+            type: 'NAVIGATION_SUCCESS',
+            requestId: data.requestId
+          });
+          
+        } catch (error) {
+          console.error('Navigation error:', error);
+          this.sendMessageToIframe({
+            type: 'NAVIGATION_ERROR',
+            requestId: data.requestId,
+            error: error.message
+          });
+        }
       }
       
       sendMessageToIframe(message) {

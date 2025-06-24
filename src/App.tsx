@@ -1,8 +1,8 @@
 import React from 'react';
-import { EnhancedStoreLocator } from './components/EnhancedStoreLocator';
+import { StoreLocator } from './components/StoreLocator';
 
 function App() {
-  return <EnhancedStoreLocator />;
+  return <StoreLocator />;
 }
 
 export default App;
