@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Store, UserLocation } from '../types/store';
 import { StoreFilters } from '../types/filters';
-import { fetchStores, subscribeToStoreUpdates, transformStoreData } from '../services/supabase';
+import { fetchStores, subscribeToStoreUpdates, transformStoreData, runDatabaseDiagnostics, quickSetup } from '../services/supabase';
 import { olaMapService } from '../services/olaMapService';
 import { NavigationService } from '../utils/navigationUtils';
 import { StoreList } from './StoreList';
@@ -9,7 +9,7 @@ import { SearchBox } from './SearchBox';
 import { FilterPanel } from './FilterPanel';
 import { MapContainer } from './MapContainer';
 import { LoadingSpinner } from './LoadingSpinner';
-import { MapPin, Store as StoreIcon, Navigation, AlertCircle, MapPinIcon, Loader2, CheckCircle } from 'lucide-react';
+import { MapPin, Store as StoreIcon, Navigation, AlertCircle, MapPinIcon, Loader2, CheckCircle, Database, Settings, RefreshCw } from 'lucide-react';
 
 const DEFAULT_FILTERS: StoreFilters = {
   hours: [],
@@ -35,6 +35,8 @@ export const StoreLocator: React.FC = () => {
   const [locationError, setLocationError] = useState<string | null>(null);
   const [navigationStatus, setNavigationStatus] = useState<string>('');
   const [isNavigating, setIsNavigating] = useState(false);
+  const [databaseStatus, setDatabaseStatus] = useState<any>(null);
+  const [showDiagnostics, setShowDiagnostics] = useState(false);
 
   // Define helper functions before they are used
   const applyFilters = useCallback((storeList: Store[], currentFilters: StoreFilters, effectiveLocation: UserLocation | undefined): Store[] => {
@@ -82,7 +84,7 @@ export const StoreLocator: React.FC = () => {
     }
   }, []);
 
-  // Process store data with coordinates - Updated for simplified schema
+  // Process store data with coordinates
   const processStoreWithCoordinates = useCallback(async (rawStore: any): Promise<Store | null> => {
     try {
       const transformedStore = transformStoreData(rawStore);
@@ -104,14 +106,14 @@ export const StoreLocator: React.FC = () => {
     }
   }, []);
 
-  // Real-time event handlers - Updated for simplified schema
+  // Real-time event handlers
   const handleStoreInsert = useCallback(async (payload: any) => {
     console.log('Handling store insert:', payload);
     const newStore = await processStoreWithCoordinates(payload.new);
     
     if (newStore) {
       setStores(prevStores => {
-        // Check if store already exists to avoid duplicates (using name + location as unique key)
+        // Check if store already exists to avoid duplicates
         const exists = prevStores.some(store => 
           store.name === newStore.name && store.location === newStore.location
         );
@@ -130,7 +132,6 @@ export const StoreLocator: React.FC = () => {
     if (updatedStore) {
       setStores(prevStores => 
         prevStores.map(store => 
-          // Match by name and location since we don't have IDs
           (store.name === payload.old.Name && store.location === payload.old.Location) 
             ? updatedStore 
             : store
@@ -165,7 +166,43 @@ export const StoreLocator: React.FC = () => {
     );
   }, []);
 
-  // Load stores data on component mount
+  // Initialize database connection
+  useEffect(() => {
+    const initializeDatabase = async () => {
+      console.log('🚀 Initializing database connection...');
+      setDatabaseStatus({ status: 'connecting', message: 'Connecting to database...' });
+      
+      try {
+        const setupResult = await quickSetup();
+        
+        if (setupResult.success) {
+          setDatabaseStatus({ 
+            status: 'connected', 
+            message: setupResult.testDataAdded 
+              ? `Connected successfully! Added ${setupResult.testDataAdded ? 'test' : ''} data.`
+              : `Connected successfully! Found ${setupResult.rowCount || 0} stores.`,
+            details: setupResult
+          });
+        } else {
+          setDatabaseStatus({ 
+            status: 'error', 
+            message: `Connection failed: ${setupResult.error}`,
+            details: setupResult
+          });
+        }
+      } catch (error) {
+        setDatabaseStatus({ 
+          status: 'error', 
+          message: `Initialization failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+          details: error
+        });
+      }
+    };
+
+    initializeDatabase();
+  }, []);
+
+  // Load stores data
   useEffect(() => {
     loadStoresData();
     getCurrentLocation();
@@ -228,8 +265,21 @@ export const StoreLocator: React.FC = () => {
     try {
       setLoading(true);
       setError(null);
+      
+      console.log('📊 Loading stores data...');
       const storesData = await fetchStores();
       
+      if (!storesData || storesData.length === 0) {
+        setError('No store data found. The database might be empty.');
+        setDatabaseStatus(prev => ({ 
+          ...prev, 
+          status: 'warning', 
+          message: 'Database is empty - no stores found' 
+        }));
+        return;
+      }
+      
+      console.log('🔄 Processing stores with coordinates...');
       const storesWithCoordinates = await Promise.all(
         storesData.map(async (store: any) => {
           return await processStoreWithCoordinates(store);
@@ -241,10 +291,22 @@ export const StoreLocator: React.FC = () => {
       
       if (validStores.length === 0) {
         setError('No stores with valid locations found.');
+      } else {
+        console.log(`✅ Successfully loaded ${validStores.length} stores`);
+        setDatabaseStatus(prev => ({ 
+          ...prev, 
+          status: 'connected', 
+          message: `Successfully loaded ${validStores.length} stores` 
+        }));
       }
     } catch (error) {
-      console.error('Error loading stores:', error);
+      console.error('❌ Error loading stores:', error);
       setError(`Failed to load store data: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      setDatabaseStatus(prev => ({ 
+        ...prev, 
+        status: 'error', 
+        message: `Failed to load stores: ${error instanceof Error ? error.message : 'Unknown error'}` 
+      }));
     } finally {
       setLoading(false);
     }
@@ -411,6 +473,20 @@ export const StoreLocator: React.FC = () => {
     getCurrentLocation();
   };
 
+  const handleRunDiagnostics = async () => {
+    setShowDiagnostics(true);
+    try {
+      const diagnostics = await runDatabaseDiagnostics();
+      setDatabaseStatus(prev => ({ 
+        ...prev, 
+        diagnostics,
+        lastDiagnosticRun: Date.now()
+      }));
+    } catch (error) {
+      console.error('Diagnostics failed:', error);
+    }
+  };
+
   const getNavigationStatusIcon = () => {
     if (isNavigating) {
       return <Loader2 className="w-5 h-5 animate-spin text-blue-600" />;
@@ -424,6 +500,21 @@ export const StoreLocator: React.FC = () => {
     return null;
   };
 
+  const getDatabaseStatusIcon = () => {
+    switch (databaseStatus?.status) {
+      case 'connected':
+        return <CheckCircle className="w-5 h-5 text-green-600" />;
+      case 'connecting':
+        return <Loader2 className="w-5 h-5 animate-spin text-blue-600" />;
+      case 'error':
+        return <AlertCircle className="w-5 h-5 text-red-600" />;
+      case 'warning':
+        return <AlertCircle className="w-5 h-5 text-yellow-600" />;
+      default:
+        return <Database className="w-5 h-5 text-gray-600" />;
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center p-4">
@@ -435,8 +526,17 @@ export const StoreLocator: React.FC = () => {
               className="w-16 h-16 mx-auto rounded-xl shadow-sm"
             />
           </div>
-          <LoadingSpinner message="Finding stores near you..." />
-          <p className="text-body mt-4">Please wait while we locate the best stores for you</p>
+          <LoadingSpinner message="Connecting to database..." />
+          <p className="text-body mt-4">Setting up your store locator</p>
+          
+          {databaseStatus && (
+            <div className="mt-4 p-3 clean-glass rounded-xl">
+              <div className="flex items-center gap-2 justify-center">
+                {getDatabaseStatusIcon()}
+                <span className="text-sm">{databaseStatus.message}</span>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     );
@@ -452,17 +552,63 @@ export const StoreLocator: React.FC = () => {
             className="w-12 h-12 mx-auto rounded-xl shadow-sm mb-6"
           />
           <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
-          <h2 className="text-xl font-semibold text-heading mb-2">Unable to Load Stores</h2>
+          <h2 className="text-xl font-semibold text-heading mb-2">Database Connection Issue</h2>
           <p className="text-body mb-6">{error}</p>
+          
+          {databaseStatus && (
+            <div className="mb-6 p-3 clean-glass rounded-xl">
+              <div className="flex items-center gap-2 justify-center mb-2">
+                {getDatabaseStatusIcon()}
+                <span className="text-sm font-medium">Database Status</span>
+              </div>
+              <p className="text-xs text-muted">{databaseStatus.message}</p>
+            </div>
+          )}
           
           <div className="space-y-3">
             <button
               onClick={loadStoresData}
               className="custom-button-primary px-6 py-3 rounded-xl font-semibold w-full"
             >
-              Try Again
+              <RefreshCw className="w-4 h-4 mr-2" />
+              Retry Connection
+            </button>
+            
+            <button
+              onClick={handleRunDiagnostics}
+              className="clean-button px-6 py-3 rounded-xl font-semibold w-full flex items-center justify-center gap-2"
+            >
+              <Settings className="w-4 h-4" />
+              Run Diagnostics
             </button>
           </div>
+          
+          {showDiagnostics && databaseStatus?.diagnostics && (
+            <div className="mt-6 p-4 bg-gray-50 rounded-xl text-left">
+              <h3 className="font-semibold mb-2">Database Diagnostics</h3>
+              <div className="text-xs space-y-2">
+                <div>
+                  <strong>Connection:</strong> {databaseStatus.diagnostics.connection?.success ? '✅' : '❌'}
+                </div>
+                <div>
+                  <strong>Table Access:</strong> {databaseStatus.diagnostics.tableAccess?.success ? '✅' : '❌'}
+                </div>
+                <div>
+                  <strong>Data Count:</strong> {databaseStatus.diagnostics.dataCount?.count || 0}
+                </div>
+                {databaseStatus.diagnostics.recommendations?.length > 0 && (
+                  <div>
+                    <strong>Recommendations:</strong>
+                    <ul className="list-disc list-inside mt-1">
+                      {databaseStatus.diagnostics.recommendations.map((rec: string, idx: number) => (
+                        <li key={idx}>{rec}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       </div>
     );
@@ -470,7 +616,7 @@ export const StoreLocator: React.FC = () => {
 
   return (
     <div className="min-h-screen">
-      {/* Clean Header */}
+      {/* Header */}
       <header className="clean-header sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6">
           <div className="flex items-center gap-4">
@@ -490,15 +636,48 @@ export const StoreLocator: React.FC = () => {
               </p>
             </div>
             <div className="hidden sm:flex items-center gap-4">
-              <span className="text-sm text-muted">
-                {filteredStores.length} stores
-              </span>
+              <div className="flex items-center gap-2 text-sm text-muted">
+                <StoreIcon className="w-4 h-4" />
+                <span>{filteredStores.length} stores</span>
+              </div>
+              {databaseStatus && (
+                <div className="flex items-center gap-2 text-sm text-muted">
+                  {getDatabaseStatusIcon()}
+                  <span className="hidden lg:inline">{databaseStatus.status}</span>
+                </div>
+              )}
             </div>
           </div>
         </div>
       </header>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-6">
+        {/* Database Status Card */}
+        {databaseStatus && (
+          <div className={`clean-glass rounded-xl p-4 sm:p-6 fade-in ${
+            databaseStatus.status === 'error' ? 'status-error' : 
+            databaseStatus.status === 'warning' ? 'status-warning' : 
+            databaseStatus.status === 'connected' ? 'status-success' : 'status-info'
+          }`}>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                {getDatabaseStatusIcon()}
+                <div>
+                  <p className="font-semibold">Database Connection</p>
+                  <p className="text-sm">{databaseStatus.message}</p>
+                </div>
+              </div>
+              <button
+                onClick={handleRunDiagnostics}
+                className="clean-button px-4 py-2 rounded-lg text-sm font-medium mobile-touch"
+              >
+                <Settings className="w-4 h-4 mr-2" />
+                Diagnose
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Location Status Cards */}
         {locationLoading && (
           <div className="clean-glass rounded-xl p-4 sm:p-6 fade-in">
@@ -634,12 +813,31 @@ export const StoreLocator: React.FC = () => {
                   <p className="text-body mb-2 font-medium">
                     {searchQuery ? 'No stores match your search' : 'No stores found'}
                   </p>
-                  <p className="text-sm text-muted">
+                  <p className="text-sm text-muted mb-4">
                     {searchQuery || getActiveFiltersCount() > 0 
                       ? 'Try adjusting your search or filters' 
-                      : 'Try adjusting your location'
+                      : 'Check your database connection'
                     }
                   </p>
+                  
+                  {!searchQuery && getActiveFiltersCount() === 0 && (
+                    <div className="space-y-2">
+                      <button
+                        onClick={loadStoresData}
+                        className="clean-button px-4 py-2 rounded-lg text-sm font-medium mobile-touch"
+                      >
+                        <RefreshCw className="w-4 h-4 mr-2" />
+                        Refresh Data
+                      </button>
+                      <button
+                        onClick={handleRunDiagnostics}
+                        className="clean-button px-4 py-2 rounded-lg text-sm font-medium mobile-touch"
+                      >
+                        <Settings className="w-4 h-4 mr-2" />
+                        Check Database
+                      </button>
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div className="max-h-[600px] overflow-y-auto custom-scrollbar">
@@ -700,6 +898,26 @@ export const StoreLocator: React.FC = () => {
                   {isNavigating ? 'Opening...' : 'Get Directions'}
                 </button>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* Diagnostics Modal */}
+        {showDiagnostics && databaseStatus?.diagnostics && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+            <div className="clean-glass-strong rounded-2xl p-6 max-w-4xl w-full max-h-[80vh] overflow-auto">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-xl font-semibold text-heading">Database Diagnostics</h3>
+                <button
+                  onClick={() => setShowDiagnostics(false)}
+                  className="clean-button p-2 rounded-lg"
+                >
+                  ×
+                </button>
+              </div>
+              <pre className="text-xs bg-gray-50 p-4 rounded-lg overflow-auto">
+                {JSON.stringify(databaseStatus.diagnostics, null, 2)}
+              </pre>
             </div>
           </div>
         )}
