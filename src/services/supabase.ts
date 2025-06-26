@@ -12,90 +12,46 @@ export const testConnection = async () => {
     console.log('URL:', supabaseUrl);
     console.log('Key (first 20 chars):', supabaseKey.substring(0, 20) + '...');
     
-    // First, try to get all tables in the public schema
-    const { data: tables, error: tablesError } = await supabase
-      .from('information_schema.tables')
-      .select('table_name')
-      .eq('table_schema', 'public')
-      .like('table_name', '%store%');
+    // Try known table names from the schema
+    const possibleTableNames = [
+      'store_locations',
+      'Store Locations',
+      'stores',
+      'locations',
+      'gudgum_stores',
+      'store_data',
+      'shop_locations'
+    ];
     
-    if (tablesError) {
-      console.log('Could not query information_schema, trying direct table access...');
-      
-      // Try common table names
-      const possibleTableNames = [
-        'stores',
-        'store_locations', 
-        'locations',
-        'gudgum_stores',
-        'store_data',
-        'shop_locations'
-      ];
-      
-      for (const tableName of possibleTableNames) {
-        try {
-          const { data, error, count } = await supabase
-            .from(tableName)
-            .select('*', { count: 'exact' })
-            .limit(1);
-          
-          if (!error) {
-            console.log(`Found table: ${tableName} with ${count} rows`);
-            if (data && data.length > 0) {
-              console.log('Sample data structure:', Object.keys(data[0]));
-            }
-            return {
-              success: true,
-              tableName,
-              rowCount: count,
-              sampleData: data,
-              columns: data && data.length > 0 ? Object.keys(data[0]) : []
-            };
+    for (const tableName of possibleTableNames) {
+      try {
+        const { data, error, count } = await supabase
+          .from(tableName)
+          .select('*', { count: 'exact' })
+          .limit(1);
+        
+        if (!error) {
+          console.log(`Found table: ${tableName} with ${count} rows`);
+          if (data && data.length > 0) {
+            console.log('Sample data structure:', Object.keys(data[0]));
           }
-        } catch (e) {
-          console.log(`Table ${tableName} not found`);
+          return {
+            success: true,
+            tableName,
+            rowCount: count,
+            sampleData: data,
+            columns: data && data.length > 0 ? Object.keys(data[0]) : []
+          };
         }
+      } catch (e) {
+        console.log(`Table ${tableName} not found`);
       }
-      
-      return {
-        success: false,
-        error: 'No store-related tables found. Please check table name.',
-        availableTables: []
-      };
-    }
-    
-    console.log('Available store-related tables:', tables);
-    
-    if (tables && tables.length > 0) {
-      // Try the first store-related table found
-      const tableName = tables[0].table_name;
-      const { data, error, count } = await supabase
-        .from(tableName)
-        .select('*', { count: 'exact' })
-        .limit(1);
-      
-      if (error) {
-        return {
-          success: false,
-          error: error.message,
-          tableName,
-          details: error
-        };
-      }
-      
-      return {
-        success: true,
-        tableName,
-        rowCount: count,
-        sampleData: data,
-        columns: data && data.length > 0 ? Object.keys(data[0]) : []
-      };
     }
     
     return {
       success: false,
-      error: 'No store-related tables found',
-      availableTables: tables
+      error: 'No store-related tables found. Please check table name.',
+      availableTables: []
     };
     
   } catch (error) {
