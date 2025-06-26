@@ -12,7 +12,7 @@ import { FilterPanel } from './FilterPanel';
 import { MapContainer } from './MapContainer';
 import { LoadingSpinner } from './LoadingSpinner';
 import { EnhancedStoreCard } from './EnhancedStoreCard';
-import { MapPin, Store as StoreIcon, Navigation, AlertCircle, MapPinIcon, Loader2, CheckCircle, Activity, Zap } from 'lucide-react';
+import { MapPin, Store as StoreIcon, Navigation, AlertCircle, MapPinIcon, Loader2, CheckCircle, Activity, Zap, RefreshCw } from 'lucide-react';
 
 const DEFAULT_FILTERS: StoreFilters = {
   hours: [],
@@ -39,6 +39,7 @@ export const EnhancedStoreLocator: React.FC = () => {
   const [navigationStatus, setNavigationStatus] = useState<string>('');
   const [isNavigating, setIsNavigating] = useState(false);
   const [performanceStats, setPerformanceStats] = useState<any>(null);
+  const [distanceValidationResults, setDistanceValidationResults] = useState<Map<string, any>>(new Map());
 
   // Initialize services on component mount
   useEffect(() => {
@@ -55,10 +56,9 @@ export const EnhancedStoreLocator: React.FC = () => {
             console.log('Location updated:', location);
             setUserLocation(location);
             
-            // Update distances for all stores
+            // Update distances for all stores with validation
             if (stores.length > 0) {
-              const updatedStores = LocationService.calculateDistancesForStores(stores, location);
-              setStores(updatedStores);
+              updateStoreDistances(stores, location);
             }
           },
           (error) => {
@@ -66,6 +66,15 @@ export const EnhancedStoreLocator: React.FC = () => {
             setLocationError('Location tracking failed');
           }
         );
+        
+        // Restore session state if returning from navigation
+        const sessionState = EnhancedNavigationService.restoreSessionState();
+        if (sessionState.userLocation) {
+          setUserLocation(sessionState.userLocation);
+        }
+        if (sessionState.selectedStore) {
+          setSelectedStore(sessionState.selectedStore);
+        }
         
         console.log('Enhanced services initialized');
       } catch (error) {
@@ -78,6 +87,7 @@ export const EnhancedStoreLocator: React.FC = () => {
     // Cleanup on unmount
     return () => {
       LocationService.stopLocationWatch();
+      EnhancedNavigationService.clearSessionState();
     };
   }, []);
 
@@ -94,6 +104,39 @@ export const EnhancedStoreLocator: React.FC = () => {
     }, 10000); // Every 10 seconds
 
     return () => clearInterval(statsInterval);
+  }, []);
+
+  // Update store distances with validation
+  const updateStoreDistances = useCallback(async (storeList: Store[], location: UserLocation) => {
+    const updatedStores = LocationService.calculateDistancesForStores(storeList, location);
+    setStores(updatedStores);
+
+    // Validate distances for a few stores (for debugging/monitoring)
+    if (process.env.NODE_ENV === 'development') {
+      const validationPromises = updatedStores.slice(0, 3).map(async (store) => {
+        if (store.lat && store.lng && store.distance) {
+          try {
+            const validation = await LocationService.validateDistanceWithGoogleMaps(
+              location,
+              { lat: store.lat, lng: store.lng }
+            );
+            return { storeId: store.id, validation };
+          } catch (error) {
+            return { storeId: store.id, error };
+          }
+        }
+        return null;
+      });
+
+      const validationResults = await Promise.all(validationPromises);
+      const validationMap = new Map();
+      validationResults.forEach(result => {
+        if (result) {
+          validationMap.set(result.storeId, result.validation || result.error);
+        }
+      });
+      setDistanceValidationResults(validationMap);
+    }
   }, []);
 
   // Process store data with enhanced geocoding
@@ -345,11 +388,7 @@ export const EnhancedStoreLocator: React.FC = () => {
       setLocationLoading(true);
       setLocationError(null);
       
-      const location = await LocationService.getCurrentLocation({
-        enableHighAccuracy: true,
-        timeout: 30000,
-        maximumAge: 300000
-      });
+      const location = await LocationService.getCurrentLocationWithFallback();
       
       setUserLocation(location);
       
@@ -395,7 +434,8 @@ export const EnhancedStoreLocator: React.FC = () => {
           name: store.name,
           address: store.location
         },
-        (status) => setNavigationStatus(status)
+        (status) => setNavigationStatus(status),
+        store
       );
 
       // Also get route for map display
@@ -485,6 +525,11 @@ export const EnhancedStoreLocator: React.FC = () => {
     getCurrentLocation();
   };
 
+  const handleRefreshData = () => {
+    loadStoresData();
+    getCurrentLocation();
+  };
+
   const getNavigationStatusIcon = () => {
     if (isNavigating) {
       return <Loader2 className="w-5 h-5 animate-spin text-blue-600" />;
@@ -492,7 +537,7 @@ export const EnhancedStoreLocator: React.FC = () => {
     if (navigationStatus.startsWith('Error:')) {
       return <AlertCircle className="w-5 h-5 text-red-600" />;
     }
-    if (navigationStatus.startsWith('Opened in')) {
+    if (navigationStatus.startsWith('Opened in') || navigationStatus.startsWith('Welcome back')) {
       return <CheckCircle className="w-5 h-5 text-green-600" />;
     }
     return null;
@@ -592,6 +637,13 @@ export const EnhancedStoreLocator: React.FC = () => {
                   <span>Cache: {performanceStats.geocodeCache.size}</span>
                 </div>
               )}
+              <button
+                onClick={handleRefreshData}
+                className="clean-button p-2 rounded-lg mobile-touch"
+                title="Refresh data"
+              >
+                <RefreshCw className="w-4 h-4" />
+              </button>
             </div>
           </div>
         </div>
@@ -649,7 +701,7 @@ export const EnhancedStoreLocator: React.FC = () => {
 
         {/* Navigation Status */}
         {navigationStatus && (
-          <div className={`rounded-xl p-4 sm:p-6 fade-in clean-glass ${navigationStatus.startsWith('Error:') ? 'status-error' : navigationStatus.startsWith('Opened in') ? 'status-success' : 'status-info'}`}>
+          <div className={`rounded-xl p-4 sm:p-6 fade-in clean-glass ${navigationStatus.startsWith('Error:') ? 'status-error' : navigationStatus.startsWith('Opened in') || navigationStatus.startsWith('Welcome back') ? 'status-success' : 'status-info'}`}>
             <div className="flex items-center gap-3">
               {getNavigationStatusIcon()}
               <div>
@@ -685,6 +737,23 @@ export const EnhancedStoreLocator: React.FC = () => {
                 <p className="font-semibold">{performanceStats.apiUsage.remainingCalls}</p>
               </div>
             </div>
+            
+            {/* Distance Validation Results */}
+            {distanceValidationResults.size > 0 && (
+              <div className="mt-4 pt-4 border-t border-white/20">
+                <h4 className="font-semibold text-sm mb-2">Distance Validation</h4>
+                <div className="space-y-2 text-xs">
+                  {Array.from(distanceValidationResults.entries()).map(([storeId, validation]) => (
+                    <div key={storeId} className="flex justify-between">
+                      <span>Store {storeId.slice(-4)}</span>
+                      <span className={validation.accuracy === 'high' ? 'text-green-600' : validation.accuracy === 'medium' ? 'text-yellow-600' : 'text-red-600'}>
+                        {validation.accuracy || 'Error'}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -821,7 +890,7 @@ export const EnhancedStoreLocator: React.FC = () => {
                 )}
                 {selectedStore.distance && (
                   <p className="text-primary font-semibold">
-                    {selectedStore.distance.toFixed(1)} km away
+                    {LocationService.formatDistance(selectedStore.distance).formatted} away
                   </p>
                 )}
                 

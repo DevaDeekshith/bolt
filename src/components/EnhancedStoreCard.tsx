@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { Store } from '../types/store';
 import { MapPin, Clock, Phone, Navigation, Loader2, CheckCircle, AlertCircle, Star, ExternalLink } from 'lucide-react';
 import { EnhancedNavigationService } from '../services/enhancedNavigationService';
@@ -23,6 +23,50 @@ export const EnhancedStoreCard: React.FC<EnhancedStoreCardProps> = ({
   const [navigationStatus, setNavigationStatus] = useState<string>('');
   const [isNavigating, setIsNavigating] = useState(false);
   const [lastNavigationAttempt, setLastNavigationAttempt] = useState<number>(0);
+  const [distanceValidation, setDistanceValidation] = useState<{
+    calculated: number;
+    google?: number;
+    accuracy: 'high' | 'medium' | 'low';
+  } | null>(null);
+
+  // Validate distance calculation on mount and when dependencies change
+  useEffect(() => {
+    if (userLocation && store.lat && store.lng && store.distance) {
+      const validateDistance = async () => {
+        try {
+          const validation = await LocationService.validateDistanceWithGoogleMaps(
+            userLocation,
+            { lat: store.lat!, lng: store.lng! }
+          );
+          setDistanceValidation(validation);
+        } catch (error) {
+          console.warn('Distance validation failed:', error);
+        }
+      };
+
+      validateDistance();
+    }
+  }, [userLocation, store.lat, store.lng, store.distance]);
+
+  // Listen for navigation return events
+  useEffect(() => {
+    const handleNavigationReturn = (event: CustomEvent) => {
+      console.log('Navigation return detected:', event.detail);
+      setNavigationStatus('Welcome back! Navigation completed.');
+      setIsNavigating(false);
+      
+      // Clear status after a few seconds
+      setTimeout(() => {
+        setNavigationStatus('');
+      }, 3000);
+    };
+
+    window.addEventListener('navigationReturn', handleNavigationReturn as EventListener);
+    
+    return () => {
+      window.removeEventListener('navigationReturn', handleNavigationReturn as EventListener);
+    };
+  }, []);
 
   const handleDirectionsClick = useCallback(async (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -56,10 +100,7 @@ export const EnhancedStoreCard: React.FC<EnhancedStoreCardProps> = ({
 
     try {
       // Get current location if not provided
-      const currentLocation = userLocation || await LocationService.getCurrentLocation({
-        timeout: 10000,
-        enableHighAccuracy: true
-      });
+      const currentLocation = userLocation || await LocationService.getCurrentLocationWithFallback();
 
       // Sanitize destination data
       const sanitizedDestination = SecurityUtils.sanitizeLocationParams({
@@ -73,7 +114,7 @@ export const EnhancedStoreCard: React.FC<EnhancedStoreCardProps> = ({
         throw new Error('Invalid destination coordinates');
       }
 
-      // Use enhanced navigation service
+      // Use enhanced navigation service with session state management
       const result = await EnhancedNavigationService.openNavigation(
         currentLocation,
         {
@@ -82,7 +123,8 @@ export const EnhancedStoreCard: React.FC<EnhancedStoreCardProps> = ({
           name: sanitizedDestination.name,
           address: sanitizedDestination.address
         },
-        (status) => setNavigationStatus(status)
+        (status) => setNavigationStatus(status),
+        store // Pass store for session state
       );
 
       if (result.success) {
@@ -102,8 +144,10 @@ export const EnhancedStoreCard: React.FC<EnhancedStoreCardProps> = ({
 
       // Clear status after success
       setTimeout(() => {
-        setNavigationStatus('');
-        setIsNavigating(false);
+        if (!navigationStatus.includes('Welcome back')) {
+          setNavigationStatus('');
+          setIsNavigating(false);
+        }
       }, 3000);
       
     } catch (error) {
@@ -124,7 +168,7 @@ export const EnhancedStoreCard: React.FC<EnhancedStoreCardProps> = ({
         setIsNavigating(false);
       }, 5000);
     }
-  }, [store, userLocation, onGetDirections, lastNavigationAttempt]);
+  }, [store, userLocation, onGetDirections, lastNavigationAttempt, navigationStatus]);
 
   const getStatusIcon = () => {
     if (isNavigating) {
@@ -133,7 +177,7 @@ export const EnhancedStoreCard: React.FC<EnhancedStoreCardProps> = ({
     if (navigationStatus.startsWith('Error:')) {
       return <AlertCircle className="w-4 h-4 text-red-500" />;
     }
-    if (navigationStatus.startsWith('Opened in')) {
+    if (navigationStatus.startsWith('Opened in') || navigationStatus.startsWith('Welcome back')) {
       return <CheckCircle className="w-4 h-4 text-green-500" />;
     }
     return <Navigation className="w-4 h-4" />;
@@ -143,7 +187,7 @@ export const EnhancedStoreCard: React.FC<EnhancedStoreCardProps> = ({
     if (navigationStatus.startsWith('Error:')) {
       return 'status-error';
     }
-    if (navigationStatus.startsWith('Opened in')) {
+    if (navigationStatus.startsWith('Opened in') || navigationStatus.startsWith('Welcome back')) {
       return 'status-success';
     }
     if (navigationStatus.includes('wait')) {
@@ -155,12 +199,31 @@ export const EnhancedStoreCard: React.FC<EnhancedStoreCardProps> = ({
   // Generate mock rating for demonstration
   const rating = (store as any).rating || (4.0 + Math.random());
 
-  // Calculate distance display
-  const distanceDisplay = store.distance 
-    ? `${store.distance.toFixed(1)} km away`
-    : userLocation && store.lat && store.lng
-      ? `${LocationService.calculateDistance(userLocation.lat, userLocation.lng, store.lat, store.lng).toFixed(1)} km away`
-      : null;
+  // Calculate distance display with validation
+  const getDistanceDisplay = () => {
+    if (store.distance) {
+      const formatted = LocationService.formatDistance(store.distance, 'km');
+      return `${formatted.formatted} away`;
+    }
+    
+    if (userLocation && store.lat && store.lng) {
+      const distance = LocationService.calculateDistance(
+        userLocation.lat, 
+        userLocation.lng, 
+        store.lat, 
+        store.lng
+      );
+      
+      if (isFinite(distance)) {
+        const formatted = LocationService.formatDistance(distance, 'km');
+        return `${formatted.formatted} away`;
+      }
+    }
+    
+    return null;
+  };
+
+  const distanceDisplay = getDistanceDisplay();
 
   // Sanitize store data for display
   const sanitizedStore = {
@@ -242,10 +305,23 @@ export const EnhancedStoreCard: React.FC<EnhancedStoreCardProps> = ({
           )}
           
           {distanceDisplay && (
-            <div className="clean-button inline-flex items-center px-3 py-2 rounded-xl">
-              <span className="text-sm font-semibold text-primary">
-                {distanceDisplay}
-              </span>
+            <div className="space-y-2">
+              <div className="clean-button inline-flex items-center px-3 py-2 rounded-xl">
+                <span className="text-sm font-semibold text-primary">
+                  {distanceDisplay}
+                </span>
+              </div>
+              
+              {/* Distance validation indicator */}
+              {distanceValidation && process.env.NODE_ENV === 'development' && (
+                <div className="text-xs text-muted bg-slate-100/50 p-2 rounded-lg">
+                  <p>Calculated: {distanceValidation.calculated.toFixed(2)} km</p>
+                  {distanceValidation.google && (
+                    <p>Est. Road: {distanceValidation.google.toFixed(2)} km</p>
+                  )}
+                  <p>Accuracy: {distanceValidation.accuracy}</p>
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -284,6 +360,12 @@ export const EnhancedStoreCard: React.FC<EnhancedStoreCardProps> = ({
                   </ul>
                 </div>
               )}
+              
+              {navigationStatus.startsWith('Welcome back') && (
+                <div className="mt-2 text-xs opacity-75">
+                  <p>Your session has been restored</p>
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -293,6 +375,7 @@ export const EnhancedStoreCard: React.FC<EnhancedStoreCardProps> = ({
           <div className="text-xs text-muted bg-slate-100/50 p-2 rounded-lg">
             <p>Device: {EnhancedNavigationService.getDeviceCapabilities().platform}</p>
             <p>Mobile: {EnhancedNavigationService.getDeviceCapabilities().isMobile ? 'Yes' : 'No'}</p>
+            <p>Coordinates: {store.lat?.toFixed(4)}, {store.lng?.toFixed(4)}</p>
           </div>
         )}
       </div>

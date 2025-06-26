@@ -32,6 +32,13 @@ export class EnhancedNavigationService {
   private static lastNavigationTime = 0;
   private static readonly NAVIGATION_COOLDOWN = 2000; // 2 seconds
 
+  // Session state management
+  private static sessionState = {
+    lastUserLocation: null as UserLocation | null,
+    lastSelectedStore: null as any,
+    returnUrl: null as string | null
+  };
+
   /**
    * Detect device capabilities for optimal navigation
    */
@@ -67,6 +74,67 @@ export class EnhancedNavigationService {
     }
     
     return false;
+  }
+
+  /**
+   * Save session state before navigation
+   */
+  static saveSessionState(userLocation: UserLocation | null, selectedStore: any): void {
+    this.sessionState = {
+      lastUserLocation: userLocation,
+      lastSelectedStore: selectedStore,
+      returnUrl: window.location.href
+    };
+    
+    // Store in sessionStorage for persistence across page reloads
+    try {
+      sessionStorage.setItem('storeLocatorState', JSON.stringify(this.sessionState));
+    } catch (error) {
+      console.warn('Failed to save session state:', error);
+    }
+  }
+
+  /**
+   * Restore session state after returning from navigation
+   */
+  static restoreSessionState(): {
+    userLocation: UserLocation | null;
+    selectedStore: any;
+    returnUrl: string | null;
+  } {
+    try {
+      const saved = sessionStorage.getItem('storeLocatorState');
+      if (saved) {
+        const state = JSON.parse(saved);
+        this.sessionState = state;
+        return state;
+      }
+    } catch (error) {
+      console.warn('Failed to restore session state:', error);
+    }
+    
+    return {
+      userLocation: this.sessionState.lastUserLocation,
+      selectedStore: this.sessionState.lastSelectedStore,
+      returnUrl: this.sessionState.returnUrl
+    };
+  }
+
+  /**
+   * Clear session state
+   */
+  static clearSessionState(): void {
+    this.sessionState = {
+      lastUserLocation: null,
+      lastSelectedStore: null,
+      returnUrl: null
+    };
+    
+    try {
+      sessionStorage.removeItem('storeLocatorState');
+    } catch (error) {
+      console.warn('Failed to clear session state:', error);
+    }
   }
 
   /**
@@ -109,11 +177,12 @@ export class EnhancedNavigationService {
   }
 
   /**
-   * Generate Google Maps web URL with enhanced address filling
+   * Generate Google Maps web URL with enhanced address filling and proper target handling
    */
   static generateWebMapsUrl(
     origin: UserLocation,
-    destination: NavigationDestination
+    destination: NavigationDestination,
+    options: { preventRedirect?: boolean } = {}
   ): string {
     const sanitized = this.sanitizeLocationParams(destination);
     if (!sanitized.isValid || !sanitized.sanitized) {
@@ -126,7 +195,6 @@ export class EnhancedNavigationService {
     // Enhanced destination parameter with full address for auto-filling
     let destinationParam = '';
     if (dest.name && dest.address) {
-      // Combine name and address for better auto-filling in Google Maps
       destinationParam = `${encodeURIComponent(dest.name + ', ' + dest.address)}`;
     } else if (dest.name) {
       destinationParam = `${encodeURIComponent(dest.name)}/@${dest.lat},${dest.lng}`;
@@ -142,6 +210,11 @@ export class EnhancedNavigationService {
     // Add query parameter for better search results
     if (dest.name) {
       params.append('query', encodeURIComponent(dest.name));
+    }
+
+    // Add return URL parameter to help with navigation back
+    if (!options.preventRedirect && this.sessionState.returnUrl) {
+      params.append('callback', encodeURIComponent(this.sessionState.returnUrl));
     }
 
     return `https://www.google.com/maps/dir/?${params.toString()}`;
@@ -177,6 +250,11 @@ export class EnhancedNavigationService {
     
     if (dest.name) {
       params.append('q', encodeURIComponent(dest.name));
+    }
+
+    // Add callback URL for iOS
+    if (this.sessionState.returnUrl) {
+      params.append('callback', encodeURIComponent(this.sessionState.returnUrl));
     }
 
     return `${this.GOOGLE_MAPS_IOS_SCHEME}?${params.toString()}`;
@@ -247,12 +325,13 @@ export class EnhancedNavigationService {
   }
 
   /**
-   * Enhanced navigation opening with better Shopify compatibility
+   * Enhanced navigation opening with better redirect handling
    */
   static async openNavigation(
     origin: UserLocation,
     destination: NavigationDestination,
-    onStatusUpdate?: (status: string) => void
+    onStatusUpdate?: (status: string) => void,
+    selectedStore?: any
   ): Promise<NavigationResult> {
     const now = Date.now();
     if (now - this.lastNavigationTime < this.NAVIGATION_COOLDOWN) {
@@ -266,6 +345,9 @@ export class EnhancedNavigationService {
 
     try {
       onStatusUpdate?.('Preparing navigation...');
+      
+      // Save session state before navigation
+      this.saveSessionState(origin, selectedStore);
       
       const capabilities = this.getDeviceCapabilities();
       const sanitized = this.sanitizeLocationParams(destination);
@@ -340,8 +422,8 @@ export class EnhancedNavigationService {
           url: navigationUrl
         };
       } else {
-        // Fallback to direct navigation
-        return await this.openDirectNavigation(navigationUrl, onStatusUpdate);
+        // Fallback to direct navigation with proper target handling
+        return await this.openDirectNavigation(navigationUrl, onStatusUpdate, true);
       }
     } catch (error) {
       console.error('Embedded navigation error:', error);
@@ -350,38 +432,79 @@ export class EnhancedNavigationService {
   }
 
   /**
-   * Direct navigation opening with enhanced compatibility
+   * Direct navigation opening with enhanced compatibility and redirect handling
    */
   private static async openDirectNavigation(
     url: string,
-    onStatusUpdate?: (status: string) => void
+    onStatusUpdate?: (status: string) => void,
+    forceNewWindow: boolean = false
   ): Promise<NavigationResult> {
     try {
       if (url.startsWith('comgooglemaps://') || url.startsWith('intent://')) {
-        // Mobile app deep links
+        // Mobile app deep links - these should open in the app and return properly
         window.location.href = url;
         onStatusUpdate?.('Opened in Google Maps app');
         return { success: true, method: 'app', url };
       } else {
-        // Web URLs with enhanced popup handling
-        const newWindow = window.open(url, '_blank', 'noopener,noreferrer,popup=yes,width=800,height=600');
+        // Web URLs with enhanced popup handling to prevent redirect issues
+        const windowFeatures = forceNewWindow 
+          ? 'noopener,noreferrer,popup=yes,width=1200,height=800,scrollbars=yes,resizable=yes'
+          : 'noopener,noreferrer';
+        
+        const newWindow = window.open(url, '_blank', windowFeatures);
         
         if (!newWindow || newWindow.closed || typeof newWindow.closed === 'undefined') {
           // Popup blocked, try alternative methods
           onStatusUpdate?.('Popup blocked, trying alternative method...');
           
-          // Try using location.href as fallback
-          window.location.href = url;
-          onStatusUpdate?.('Opened in same window');
+          // Create a temporary link element to handle the navigation properly
+          const link = document.createElement('a');
+          link.href = url;
+          link.target = '_blank';
+          link.rel = 'noopener noreferrer';
+          
+          // Add to DOM temporarily and click
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          
+          onStatusUpdate?.('Opened in new tab');
           return { success: true, method: 'web', url };
         } else {
           onStatusUpdate?.('Opened in Google Maps (Web)');
+          
+          // Set up a listener to detect when the user returns
+          this.setupReturnListener(newWindow);
+          
           return { success: true, method: 'web', url };
         }
       }
     } catch (error) {
       throw new Error(`Direct navigation failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
+  }
+
+  /**
+   * Set up listener to detect when user returns from navigation
+   */
+  private static setupReturnListener(navigationWindow: Window): void {
+    const checkClosed = () => {
+      if (navigationWindow.closed) {
+        console.log('User returned from navigation');
+        // Restore any necessary state
+        const state = this.restoreSessionState();
+        if (state.userLocation || state.selectedStore) {
+          // Trigger a custom event to notify the app
+          window.dispatchEvent(new CustomEvent('navigationReturn', {
+            detail: state
+          }));
+        }
+        return;
+      }
+      setTimeout(checkClosed, 1000);
+    };
+    
+    setTimeout(checkClosed, 1000);
   }
 
   /**
@@ -466,7 +589,7 @@ export class EnhancedNavigationService {
       const webUrl = this.generateWebMapsUrl(origin, destination);
       onStatusUpdate?.('Opening Google Maps in browser...');
       
-      return await this.openDirectNavigation(webUrl, onStatusUpdate);
+      return await this.openDirectNavigation(webUrl, onStatusUpdate, true);
     } catch (error) {
       console.error('Web navigation failed:', error);
       return {
@@ -497,6 +620,7 @@ export class EnhancedNavigationService {
     lastNavigationTime: number;
     cooldownRemaining: number;
     deviceCapabilities: DeviceCapabilities;
+    sessionState: any;
   } {
     const now = Date.now();
     const cooldownRemaining = Math.max(0, this.NAVIGATION_COOLDOWN - (now - this.lastNavigationTime));
@@ -504,7 +628,8 @@ export class EnhancedNavigationService {
     return {
       lastNavigationTime: this.lastNavigationTime,
       cooldownRemaining,
-      deviceCapabilities: this.getDeviceCapabilities()
+      deviceCapabilities: this.getDeviceCapabilities(),
+      sessionState: this.sessionState
     };
   }
 }
