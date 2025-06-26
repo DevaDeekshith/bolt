@@ -5,55 +5,37 @@ const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS
 
 export const supabase = createClient(supabaseUrl, supabaseKey);
 
-// Test database connection with automatic table detection
+// Test database connection
 export const testConnection = async () => {
   try {
-    console.log('Testing Supabase connection and detecting tables...');
+    console.log('Testing Supabase connection...');
     console.log('URL:', supabaseUrl);
     console.log('Key (first 20 chars):', supabaseKey.substring(0, 20) + '...');
     
-    // Try known table names from the schema
-    const possibleTableNames = [
-      'store_locations',
-      'Store Locations',
-      'stores',
-      'locations',
-      'gudgum_stores',
-      'store_data',
-      'shop_locations'
-    ];
+    // Test basic connection with the known table structure
+    const { data, error, count } = await supabase
+      .from('store_locations')
+      .select('Name, Location', { count: 'exact' })
+      .limit(1);
     
-    for (const tableName of possibleTableNames) {
-      try {
-        const { data, error, count } = await supabase
-          .from(tableName)
-          .select('*', { count: 'exact' })
-          .limit(1);
-        
-        if (!error) {
-          console.log(`Found table: ${tableName} with ${count} rows`);
-          if (data && data.length > 0) {
-            console.log('Sample data structure:', Object.keys(data[0]));
-          }
-          return {
-            success: true,
-            tableName,
-            rowCount: count,
-            sampleData: data,
-            columns: data && data.length > 0 ? Object.keys(data[0]) : []
-          };
-        }
-      } catch (e) {
-        console.log(`Table ${tableName} not found`);
-      }
+    if (error) {
+      console.error('Connection test failed:', error);
+      return {
+        success: false,
+        error: error.message,
+        details: error
+      };
     }
     
+    console.log('Connection successful! Row count:', count);
+    console.log('Sample data:', data);
     return {
-      success: false,
-      error: 'No store-related tables found. Please check table name.',
-      availableTables: []
+      success: true,
+      tableName: 'store_locations',
+      rowCount: count,
+      sampleData: data,
+      columns: ['Name', 'Location']
     };
-    
   } catch (error) {
     console.error('Connection test exception:', error);
     return {
@@ -64,42 +46,23 @@ export const testConnection = async () => {
   }
 };
 
-// Dynamic table name - will be set after detection
-let CURRENT_TABLE_NAME = 'store_locations'; // default fallback
-
-// Set the table name dynamically
-export const setTableName = (tableName: string) => {
-  CURRENT_TABLE_NAME = tableName;
-  console.log('Updated table name to:', tableName);
-};
-
-// Fetch stores with automatic table detection and column mapping
+// Fetch stores with the correct column names
 export const fetchStores = async () => {
   try {
-    console.log(`Fetching stores from ${CURRENT_TABLE_NAME} table...`);
+    console.log('Fetching stores from store_locations table...');
     
-    // First, test connection and detect table structure
-    const connectionTest = await testConnection();
-    
-    if (!connectionTest.success) {
-      throw new Error(`Table detection failed: ${connectionTest.error}`);
-    }
-    
-    // Update table name if detected
-    if (connectionTest.tableName) {
-      setTableName(connectionTest.tableName);
-    }
-    
-    console.log(`Using table: ${CURRENT_TABLE_NAME}`);
-    console.log('Available columns:', connectionTest.columns);
-    
-    // Fetch all data from the detected table
     const { data, error } = await supabase
-      .from(CURRENT_TABLE_NAME)
-      .select('*');
+      .from('store_locations')
+      .select('Name, Location'); // Use the exact column names from your schema
     
     if (error) {
       console.error('Error fetching stores:', error);
+      console.error('Error details:', {
+        message: error.message,
+        details: error.details,
+        hint: error.hint,
+        code: error.code
+      });
       throw error;
     }
     
@@ -118,27 +81,32 @@ export const fetchStores = async () => {
   }
 };
 
-// Inspect table structure with automatic detection
+// Inspect table structure
 export const inspectTableStructure = async () => {
   try {
     console.log('Inspecting table structure...');
     
-    const connectionTest = await testConnection();
+    // Directly fetch one row to see structure
+    const { data: sampleData, error: sampleError } = await supabase
+      .from('store_locations')
+      .select('Name, Location')
+      .limit(1);
     
-    if (!connectionTest.success) {
+    if (sampleError) {
+      console.error('Table structure inspection failed:', sampleError);
       return {
         success: false,
-        error: connectionTest.error,
-        details: connectionTest
+        error: sampleError.message,
+        details: sampleError
       };
     }
     
     return {
       success: true,
-      tableName: connectionTest.tableName,
-      columns: connectionTest.columns,
-      sampleData: connectionTest.sampleData,
-      rowCount: connectionTest.rowCount
+      method: 'sample_row',
+      tableName: 'store_locations',
+      columns: ['Name', 'Location'],
+      sampleData: sampleData
     };
   } catch (error) {
     console.error('Table inspection exception:', error);
@@ -150,22 +118,22 @@ export const inspectTableStructure = async () => {
   }
 };
 
-// Real-time subscription with dynamic table name
+// Real-time subscription for store updates
 export const subscribeToStoreUpdates = (
   onInsert: (payload: any) => void,
   onUpdate: (payload: any) => void,
   onDelete: (payload: any) => void
 ) => {
-  console.log(`Setting up real-time subscription for ${CURRENT_TABLE_NAME}...`);
+  console.log('Setting up real-time subscription for store_locations...');
   
   const channel = supabase
-    .channel(`${CURRENT_TABLE_NAME}-changes`)
+    .channel('store-locations-changes')
     .on(
       'postgres_changes',
       {
         event: 'INSERT',
         schema: 'public',
-        table: CURRENT_TABLE_NAME
+        table: 'store_locations'
       },
       (payload) => {
         console.log('New store inserted:', payload);
@@ -177,7 +145,7 @@ export const subscribeToStoreUpdates = (
       {
         event: 'UPDATE',
         schema: 'public',
-        table: CURRENT_TABLE_NAME
+        table: 'store_locations'
       },
       (payload) => {
         console.log('Store updated:', payload);
@@ -189,7 +157,7 @@ export const subscribeToStoreUpdates = (
       {
         event: 'DELETE',
         schema: 'public',
-        table: CURRENT_TABLE_NAME
+        table: 'store_locations'
       },
       (payload) => {
         console.log('Store deleted:', payload);
@@ -207,109 +175,57 @@ export const subscribeToStoreUpdates = (
   };
 };
 
-// Smart column mapping for different table structures
-const mapColumnNames = (rawData: any): any => {
-  if (!rawData || typeof rawData !== 'object') {
-    return rawData;
-  }
-  
-  const columnMappings = {
-    // Name variations
-    name: ['name', 'Name', 'store_name', 'storeName', 'title', 'Title'],
-    // Location variations  
-    location: ['location', 'Location', 'address', 'Address', 'store_address', 'storeAddress'],
-    // Hours variations
-    hours: ['hours', 'Hours', 'operating_hours', 'operatingHours', 'store_hours', 'storeHours', 'timings'],
-    // Phone variations
-    phone: ['phone', 'Phone', 'contact', 'Contact', 'phone_number', 'phoneNumber', 'mobile'],
-    // Image variations
-    image: ['image', 'Image', 'photo', 'Photo', 'picture', 'Picture', 'image_url', 'imageUrl'],
-    // Rating variations
-    rating: ['rating', 'Rating', 'score', 'Score', 'stars', 'Stars'],
-    // ID variations
-    id: ['id', 'Id', 'ID', 'store_id', 'storeId', 'uuid']
-  };
-  
-  const mapped: any = {};
-  const availableKeys = Object.keys(rawData);
-  
-  // Map each field to the first available column that matches
-  for (const [targetField, possibleColumns] of Object.entries(columnMappings)) {
-    for (const possibleColumn of possibleColumns) {
-      if (availableKeys.includes(possibleColumn)) {
-        mapped[targetField] = rawData[possibleColumn];
-        break;
-      }
-    }
-  }
-  
-  // If no name found, use the first text column
-  if (!mapped.name) {
-    const firstTextColumn = availableKeys.find(key => 
-      typeof rawData[key] === 'string' && rawData[key].length > 0
-    );
-    if (firstTextColumn) {
-      mapped.name = rawData[firstTextColumn];
-    }
-  }
-  
-  // If no location found, use the second text column
-  if (!mapped.location) {
-    const textColumns = availableKeys.filter(key => 
-      typeof rawData[key] === 'string' && rawData[key].length > 0 && key !== mapped.name
-    );
-    if (textColumns.length > 0) {
-      mapped.location = rawData[textColumns[0]];
-    }
-  }
-  
-  return mapped;
-};
-
-// Enhanced transform function with smart column mapping
+// Transform store data to match your exact schema
 export const transformStoreData = (rawStore: any) => {
   console.log('Transforming store data:', rawStore);
   
-  // Apply smart column mapping
-  const mappedStore = mapColumnNames(rawStore);
-  
   return {
-    // Generate a unique ID if not present
-    id: mappedStore.id || `store_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-    name: mappedStore.name || 'Store',
-    location: mappedStore.location || '',
+    // Generate a unique ID since the table doesn't have one
+    id: `store_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+    name: rawStore.Name || rawStore.name || 'Store', // Handle both "Name" and "name"
+    location: rawStore.Location || rawStore.location || '', // Handle both "Location" and "location"
     // Add default values for missing fields
-    hours: mappedStore.hours || 'Mon-Sat 09:00 AM - 5:00 PM',
-    phone: mappedStore.phone || null,
-    image: mappedStore.image || null,
-    // Add mock rating if not present
-    rating: mappedStore.rating || (4.0 + Math.random())
+    hours: 'Mon-Sat 09:00 AM - 5:00 PM',
+    phone: null,
+    image: null,
+    // Add mock rating for demonstration
+    rating: 4.0 + Math.random()
   };
 };
 
-// Comprehensive database diagnostics with auto-detection
+// Comprehensive database diagnostics
 export const runDatabaseDiagnostics = async () => {
   console.log('🔍 Running comprehensive database diagnostics...');
   
   const results = {
     connection: null as any,
-    tableDetection: null as any,
     tableStructure: null as any,
     sampleData: null as any,
-    permissions: null as any
+    permissions: null as any,
+    schema: null as any
   };
   
   try {
-    // Test 1: Basic connection and table detection
-    console.log('📡 Testing connection and detecting tables...');
+    // Test 1: Basic connection
+    console.log('📡 Testing basic connection...');
     results.connection = await testConnection();
-    results.tableDetection = results.connection;
     
     // Test 2: Table structure
     console.log('🏗️ Inspecting table structure...');
     results.tableStructure = await inspectTableStructure();
     
-    // Test 3: Sample data
+    // Test 3: Schema validation
+    console.log('📋 Validating schema...');
+    results.schema = {
+      expectedTable: 'store_locations',
+      expectedColumns: ['Name', 'Location'],
+      actualColumns: results.connection.success ? results.connection.columns : [],
+      schemaMatch: results.connection.success && 
+                   results.connection.columns.includes('Name') && 
+                   results.connection.columns.includes('Location')
+    };
+    
+    // Test 4: Sample data
     console.log('📊 Fetching sample data...');
     try {
       const sampleData = await fetchStores();
@@ -327,28 +243,20 @@ export const runDatabaseDiagnostics = async () => {
       };
     }
     
-    // Test 4: Permissions check
+    // Test 5: Permissions check
     console.log('🔐 Testing permissions...');
     try {
-      if (results.connection.success && results.connection.tableName) {
-        const tableName = results.connection.tableName;
-        
-        // Test SELECT permission
-        const { error: selectError } = await supabase
-          .from(tableName)
-          .select('*')
-          .limit(1);
-        
-        results.permissions = {
-          select: !selectError,
-          selectError: selectError?.message,
-          tableName: tableName
-        };
-      } else {
-        results.permissions = {
-          error: 'No table detected for permission testing'
-        };
-      }
+      // Test SELECT permission using Name column
+      const { error: selectError } = await supabase
+        .from('store_locations')
+        .select('Name')
+        .limit(1);
+      
+      results.permissions = {
+        select: !selectError,
+        selectError: selectError?.message,
+        note: 'Testing SELECT permission on store_locations table'
+      };
     } catch (error) {
       results.permissions = {
         error: error instanceof Error ? error.message : 'Unknown error'
@@ -363,22 +271,21 @@ export const runDatabaseDiagnostics = async () => {
   return results;
 };
 
-// Auto-initialize table detection
+// Initialize table detection (simplified since we know the exact schema)
 export const initializeTableDetection = async () => {
   try {
-    console.log('🚀 Initializing automatic table detection...');
+    console.log('🚀 Initializing table connection...');
     const result = await testConnection();
     
-    if (result.success && result.tableName) {
-      setTableName(result.tableName);
-      console.log(`✅ Successfully detected and configured table: ${result.tableName}`);
+    if (result.success) {
+      console.log(`✅ Successfully connected to table: store_locations`);
       return result;
     } else {
-      console.warn('⚠️ No suitable table found. Please check your Supabase setup.');
+      console.warn('⚠️ Failed to connect to store_locations table. Please check your Supabase setup.');
       return result;
     }
   } catch (error) {
-    console.error('❌ Table detection failed:', error);
+    console.error('❌ Table connection failed:', error);
     throw error;
   }
 };

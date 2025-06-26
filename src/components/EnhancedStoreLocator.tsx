@@ -50,15 +50,15 @@ export const EnhancedStoreLocator: React.FC = () => {
         console.log('Initializing enhanced services...');
         
         // Initialize database connection and table detection
-        setDatabaseStatus({ status: 'detecting', message: 'Detecting database tables...' });
+        setDatabaseStatus({ status: 'detecting', message: 'Connecting to database...' });
         
         try {
           const tableDetection = await initializeTableDetection();
           setDatabaseStatus({ 
             status: tableDetection.success ? 'connected' : 'error', 
             message: tableDetection.success 
-              ? `Connected to table: ${tableDetection.tableName}` 
-              : `Table detection failed: ${tableDetection.error}`,
+              ? `Connected to store_locations table (${tableDetection.rowCount} records)` 
+              : `Database connection failed: ${tableDetection.error}`,
             details: tableDetection
           });
         } catch (error) {
@@ -211,7 +211,7 @@ export const EnhancedStoreLocator: React.FC = () => {
     }
   }, []);
 
-  // Enhanced real-time event handlers with dynamic column mapping
+  // Enhanced real-time event handlers with correct column mapping
   const handleStoreInsert = useCallback(async (payload: any) => {
     console.log('Handling enhanced store insert:', payload);
     const newStore = await processStoreWithCoordinates(payload.new);
@@ -248,13 +248,9 @@ export const EnhancedStoreLocator: React.FC = () => {
     if (updatedStore) {
       setStores(prevStores => 
         prevStores.map(store => {
-          // Try to match by ID first, then by name and location
+          // Match by name and location using the correct column names
           const oldData = payload.old;
-          const isMatch = store.id === oldData.id || 
-                         store.id === oldData.Id || 
-                         store.id === oldData.ID ||
-                         (store.name === (oldData.name || oldData.Name) && 
-                          store.location === (oldData.location || oldData.Location));
+          const isMatch = (store.name === oldData.Name && store.location === oldData.Location);
           
           return isMatch ? updatedStore : store;
         })
@@ -265,11 +261,7 @@ export const EnhancedStoreLocator: React.FC = () => {
         if (!prevSelected) return prevSelected;
         
         const oldData = payload.old;
-        const isMatch = prevSelected.id === oldData.id || 
-                       prevSelected.id === oldData.Id || 
-                       prevSelected.id === oldData.ID ||
-                       (prevSelected.name === (oldData.name || oldData.Name) && 
-                        prevSelected.location === (oldData.location || oldData.Location));
+        const isMatch = (prevSelected.name === oldData.Name && prevSelected.location === oldData.Location);
         
         return isMatch ? updatedStore : prevSelected;
       });
@@ -282,12 +274,7 @@ export const EnhancedStoreLocator: React.FC = () => {
     
     setStores(prevStores => 
       prevStores.filter(store => {
-        const isMatch = store.id === deletedData.id || 
-                       store.id === deletedData.Id || 
-                       store.id === deletedData.ID ||
-                       (store.name === (deletedData.name || deletedData.Name) && 
-                        store.location === (deletedData.location || deletedData.Location));
-        
+        const isMatch = (store.name === deletedData.Name && store.location === deletedData.Location);
         return !isMatch;
       })
     );
@@ -296,11 +283,7 @@ export const EnhancedStoreLocator: React.FC = () => {
     setSelectedStore(prevSelected => {
       if (!prevSelected) return prevSelected;
       
-      const isMatch = prevSelected.id === deletedData.id || 
-                     prevSelected.id === deletedData.Id || 
-                     prevSelected.id === deletedData.ID ||
-                     (prevSelected.name === (deletedData.name || deletedData.Name) && 
-                      prevSelected.location === (deletedData.location || deletedData.Location));
+      const isMatch = (prevSelected.name === deletedData.Name && prevSelected.location === deletedData.Location);
       
       return isMatch ? undefined : prevSelected;
     });
