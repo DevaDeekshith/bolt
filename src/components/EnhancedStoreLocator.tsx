@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Store, UserLocation } from '../types/store';
 import { StoreFilters } from '../types/filters';
-import { fetchStores, subscribeToStoreUpdates, transformStoreData } from '../services/supabase';
+import { fetchStores, subscribeToStoreUpdates, transformStoreData, runDatabaseDiagnostics, initializeTableDetection } from '../services/supabase';
 import { PerformanceOptimizedMapService } from '../services/performanceOptimizedMapService';
 import { LocationService } from '../services/locationService';
 import { EnhancedNavigationService } from '../services/enhancedNavigationService';
@@ -12,7 +12,7 @@ import { FilterPanel } from './FilterPanel';
 import { MapContainer } from './MapContainer';
 import { LoadingSpinner } from './LoadingSpinner';
 import { EnhancedStoreCard } from './EnhancedStoreCard';
-import { MapPin, Store as StoreIcon, Navigation, AlertCircle, MapPinIcon, Loader2, CheckCircle, Activity, Zap, RefreshCw } from 'lucide-react';
+import { MapPin, Store as StoreIcon, Navigation, AlertCircle, MapPinIcon, Loader2, CheckCircle, Activity, Zap, RefreshCw, Database, Settings } from 'lucide-react';
 
 const DEFAULT_FILTERS: StoreFilters = {
   hours: [],
@@ -40,12 +40,34 @@ export const EnhancedStoreLocator: React.FC = () => {
   const [isNavigating, setIsNavigating] = useState(false);
   const [performanceStats, setPerformanceStats] = useState<any>(null);
   const [distanceValidationResults, setDistanceValidationResults] = useState<Map<string, any>>(new Map());
+  const [databaseStatus, setDatabaseStatus] = useState<any>(null);
+  const [showDatabaseDiagnostics, setShowDatabaseDiagnostics] = useState(false);
 
   // Initialize services on component mount
   useEffect(() => {
     const initializeServices = async () => {
       try {
         console.log('Initializing enhanced services...');
+        
+        // Initialize database connection and table detection
+        setDatabaseStatus({ status: 'detecting', message: 'Detecting database tables...' });
+        
+        try {
+          const tableDetection = await initializeTableDetection();
+          setDatabaseStatus({ 
+            status: tableDetection.success ? 'connected' : 'error', 
+            message: tableDetection.success 
+              ? `Connected to table: ${tableDetection.tableName}` 
+              : `Table detection failed: ${tableDetection.error}`,
+            details: tableDetection
+          });
+        } catch (error) {
+          setDatabaseStatus({ 
+            status: 'error', 
+            message: `Database initialization failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+            details: error
+          });
+        }
         
         // Warm up performance optimized map service
         await PerformanceOptimizedMapService.warmUp();
@@ -79,6 +101,11 @@ export const EnhancedStoreLocator: React.FC = () => {
         console.log('Enhanced services initialized');
       } catch (error) {
         console.error('Service initialization failed:', error);
+        setDatabaseStatus({ 
+          status: 'error', 
+          message: `Service initialization failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+          details: error
+        });
       }
     };
 
@@ -184,7 +211,7 @@ export const EnhancedStoreLocator: React.FC = () => {
     }
   }, []);
 
-  // Enhanced real-time event handlers
+  // Enhanced real-time event handlers with dynamic column mapping
   const handleStoreInsert = useCallback(async (payload: any) => {
     console.log('Handling enhanced store insert:', payload);
     const newStore = await processStoreWithCoordinates(payload.new);
@@ -220,39 +247,63 @@ export const EnhancedStoreLocator: React.FC = () => {
     
     if (updatedStore) {
       setStores(prevStores => 
-        prevStores.map(store => 
-          (store.name === payload.old.Name && store.location === payload.old.Location) 
-            ? updatedStore 
-            : store
-        )
+        prevStores.map(store => {
+          // Try to match by ID first, then by name and location
+          const oldData = payload.old;
+          const isMatch = store.id === oldData.id || 
+                         store.id === oldData.Id || 
+                         store.id === oldData.ID ||
+                         (store.name === (oldData.name || oldData.Name) && 
+                          store.location === (oldData.location || oldData.Location));
+          
+          return isMatch ? updatedStore : store;
+        })
       );
       
       // Update selected store if it's the one being updated
-      setSelectedStore(prevSelected => 
-        (prevSelected?.name === payload.old.Name && prevSelected?.location === payload.old.Location) 
-          ? updatedStore 
-          : prevSelected
-      );
+      setSelectedStore(prevSelected => {
+        if (!prevSelected) return prevSelected;
+        
+        const oldData = payload.old;
+        const isMatch = prevSelected.id === oldData.id || 
+                       prevSelected.id === oldData.Id || 
+                       prevSelected.id === oldData.ID ||
+                       (prevSelected.name === (oldData.name || oldData.Name) && 
+                        prevSelected.location === (oldData.location || oldData.Location));
+        
+        return isMatch ? updatedStore : prevSelected;
+      });
     }
   }, [processStoreWithCoordinates]);
 
   const handleStoreDelete = useCallback((payload: any) => {
     console.log('Handling enhanced store delete:', payload);
-    const deletedName = payload.old.Name;
-    const deletedLocation = payload.old.Location;
+    const deletedData = payload.old;
     
     setStores(prevStores => 
-      prevStores.filter(store => 
-        !(store.name === deletedName && store.location === deletedLocation)
-      )
+      prevStores.filter(store => {
+        const isMatch = store.id === deletedData.id || 
+                       store.id === deletedData.Id || 
+                       store.id === deletedData.ID ||
+                       (store.name === (deletedData.name || deletedData.Name) && 
+                        store.location === (deletedData.location || deletedData.Location));
+        
+        return !isMatch;
+      })
     );
     
     // Clear selected store if it's the one being deleted
-    setSelectedStore(prevSelected => 
-      (prevSelected?.name === deletedName && prevSelected?.location === deletedLocation) 
-        ? undefined 
-        : prevSelected
-    );
+    setSelectedStore(prevSelected => {
+      if (!prevSelected) return prevSelected;
+      
+      const isMatch = prevSelected.id === deletedData.id || 
+                     prevSelected.id === deletedData.Id || 
+                     prevSelected.id === deletedData.ID ||
+                     (prevSelected.name === (deletedData.name || deletedData.Name) && 
+                      prevSelected.location === (deletedData.location || deletedData.Location));
+      
+      return isMatch ? undefined : prevSelected;
+    });
   }, []);
 
   // Set up real-time subscription
@@ -355,8 +406,21 @@ export const EnhancedStoreLocator: React.FC = () => {
     try {
       setLoading(true);
       setError(null);
+      
+      console.log('Loading stores data...');
       const storesData = await fetchStores();
       
+      if (!storesData || storesData.length === 0) {
+        setError('No store data found. Please check your database configuration.');
+        setDatabaseStatus(prev => ({ 
+          ...prev, 
+          status: 'warning', 
+          message: 'No store data found in database' 
+        }));
+        return;
+      }
+      
+      console.log('Processing stores with coordinates...');
       const storesWithCoordinates = await Promise.all(
         storesData.map(async (store: any) => {
           return await processStoreWithCoordinates(store);
@@ -368,10 +432,21 @@ export const EnhancedStoreLocator: React.FC = () => {
       
       if (validStores.length === 0) {
         setError('No stores with valid locations found.');
+      } else {
+        setDatabaseStatus(prev => ({ 
+          ...prev, 
+          status: 'connected', 
+          message: `Successfully loaded ${validStores.length} stores` 
+        }));
       }
     } catch (error) {
       console.error('Error loading stores:', error);
       setError(`Failed to load store data: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      setDatabaseStatus(prev => ({ 
+        ...prev, 
+        status: 'error', 
+        message: `Failed to load stores: ${error instanceof Error ? error.message : 'Unknown error'}` 
+      }));
       
       // Log security event
       SecurityUtils.logSecurityEvent({
@@ -530,6 +605,20 @@ export const EnhancedStoreLocator: React.FC = () => {
     getCurrentLocation();
   };
 
+  const handleRunDiagnostics = async () => {
+    setShowDatabaseDiagnostics(true);
+    try {
+      const diagnostics = await runDatabaseDiagnostics();
+      setDatabaseStatus(prev => ({ 
+        ...prev, 
+        diagnostics,
+        lastDiagnosticRun: Date.now()
+      }));
+    } catch (error) {
+      console.error('Diagnostics failed:', error);
+    }
+  };
+
   const getNavigationStatusIcon = () => {
     if (isNavigating) {
       return <Loader2 className="w-5 h-5 animate-spin text-blue-600" />;
@@ -541,6 +630,21 @@ export const EnhancedStoreLocator: React.FC = () => {
       return <CheckCircle className="w-5 h-5 text-green-600" />;
     }
     return null;
+  };
+
+  const getDatabaseStatusIcon = () => {
+    switch (databaseStatus?.status) {
+      case 'connected':
+        return <CheckCircle className="w-5 h-5 text-green-600" />;
+      case 'detecting':
+        return <Loader2 className="w-5 h-5 animate-spin text-blue-600" />;
+      case 'error':
+        return <AlertCircle className="w-5 h-5 text-red-600" />;
+      case 'warning':
+        return <AlertCircle className="w-5 h-5 text-yellow-600" />;
+      default:
+        return <Database className="w-5 h-5 text-gray-600" />;
+    }
   };
 
   if (loading) {
@@ -555,7 +659,16 @@ export const EnhancedStoreLocator: React.FC = () => {
             />
           </div>
           <LoadingSpinner message="Loading enhanced store locator..." />
-          <p className="text-body mt-4">Initializing performance optimizations...</p>
+          <p className="text-body mt-4">Initializing database connection and performance optimizations...</p>
+          
+          {databaseStatus && (
+            <div className="mt-4 p-3 clean-glass rounded-xl">
+              <div className="flex items-center gap-2 justify-center">
+                {getDatabaseStatusIcon()}
+                <span className="text-sm">{databaseStatus.message}</span>
+              </div>
+            </div>
+          )}
           
           {performanceStats && (
             <div className="mt-4 text-xs text-muted">
@@ -578,8 +691,18 @@ export const EnhancedStoreLocator: React.FC = () => {
             className="w-12 h-12 mx-auto rounded-xl shadow-sm mb-6"
           />
           <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
-          <h2 className="text-xl font-semibold text-heading mb-2">Service Error</h2>
+          <h2 className="text-xl font-semibold text-heading mb-2">Database Connection Issue</h2>
           <p className="text-body mb-6">{error}</p>
+          
+          {databaseStatus && (
+            <div className="mb-6 p-3 clean-glass rounded-xl">
+              <div className="flex items-center gap-2 justify-center mb-2">
+                {getDatabaseStatusIcon()}
+                <span className="text-sm font-medium">Database Status</span>
+              </div>
+              <p className="text-xs text-muted">{databaseStatus.message}</p>
+            </div>
+          )}
           
           <div className="space-y-3">
             <button
@@ -587,6 +710,14 @@ export const EnhancedStoreLocator: React.FC = () => {
               className="custom-button-primary px-6 py-3 rounded-xl font-semibold w-full"
             >
               Retry Loading
+            </button>
+            
+            <button
+              onClick={handleRunDiagnostics}
+              className="clean-button px-6 py-3 rounded-xl font-semibold w-full flex items-center justify-center gap-2"
+            >
+              <Settings className="w-4 h-4" />
+              Run Database Diagnostics
             </button>
             
             <button
@@ -600,6 +731,15 @@ export const EnhancedStoreLocator: React.FC = () => {
               Clear Cache & Reload
             </button>
           </div>
+          
+          {showDatabaseDiagnostics && databaseStatus?.diagnostics && (
+            <div className="mt-6 p-4 bg-gray-50 rounded-xl text-left">
+              <h3 className="font-semibold mb-2">Database Diagnostics</h3>
+              <pre className="text-xs overflow-auto max-h-40">
+                {JSON.stringify(databaseStatus.diagnostics, null, 2)}
+              </pre>
+            </div>
+          )}
         </div>
       </div>
     );
@@ -607,7 +747,7 @@ export const EnhancedStoreLocator: React.FC = () => {
 
   return (
     <div className="min-h-screen">
-      {/* Enhanced Header with Performance Indicators */}
+      {/* Enhanced Header with Database Status */}
       <header className="clean-header sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6">
           <div className="flex items-center gap-4">
@@ -631,6 +771,12 @@ export const EnhancedStoreLocator: React.FC = () => {
                 <Activity className="w-4 h-4 text-green-500" />
                 <span>{filteredStores.length} stores</span>
               </div>
+              {databaseStatus && (
+                <div className="flex items-center gap-2 text-sm text-muted">
+                  {getDatabaseStatusIcon()}
+                  <span className="hidden lg:inline">{databaseStatus.status}</span>
+                </div>
+              )}
               {performanceStats && (
                 <div className="flex items-center gap-2 text-sm text-muted">
                   <Zap className="w-4 h-4 text-blue-500" />
@@ -644,12 +790,46 @@ export const EnhancedStoreLocator: React.FC = () => {
               >
                 <RefreshCw className="w-4 h-4" />
               </button>
+              <button
+                onClick={handleRunDiagnostics}
+                className="clean-button p-2 rounded-lg mobile-touch"
+                title="Database diagnostics"
+              >
+                <Settings className="w-4 h-4" />
+              </button>
             </div>
           </div>
         </div>
       </header>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-6">
+        {/* Database Status Card */}
+        {databaseStatus && (
+          <div className={`clean-glass rounded-xl p-4 sm:p-6 fade-in ${
+            databaseStatus.status === 'error' ? 'status-error' : 
+            databaseStatus.status === 'warning' ? 'status-warning' : 
+            databaseStatus.status === 'connected' ? 'status-success' : 'status-info'
+          }`}>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                {getDatabaseStatusIcon()}
+                <div>
+                  <p className="font-semibold">Database Connection</p>
+                  <p className="text-sm">{databaseStatus.message}</p>
+                </div>
+              </div>
+              {databaseStatus.status === 'error' && (
+                <button
+                  onClick={handleRunDiagnostics}
+                  className="clean-button px-4 py-2 rounded-lg text-sm font-medium mobile-touch"
+                >
+                  Diagnose
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Enhanced Status Cards */}
         {locationLoading && (
           <div className="clean-glass rounded-xl p-4 sm:p-6 fade-in">
@@ -833,9 +1013,26 @@ export const EnhancedStoreLocator: React.FC = () => {
                   <p className="text-sm text-muted">
                     {searchQuery || getActiveFiltersCount() > 0 
                       ? 'Try adjusting your search or filters' 
-                      : 'Try adjusting your location'
+                      : 'Check your database connection and try refreshing'
                     }
                   </p>
+                  
+                  {!searchQuery && getActiveFiltersCount() === 0 && (
+                    <div className="mt-4 space-y-2">
+                      <button
+                        onClick={handleRefreshData}
+                        className="clean-button px-4 py-2 rounded-lg text-sm font-medium mobile-touch"
+                      >
+                        Refresh Data
+                      </button>
+                      <button
+                        onClick={handleRunDiagnostics}
+                        className="clean-button px-4 py-2 rounded-lg text-sm font-medium mobile-touch"
+                      >
+                        Check Database
+                      </button>
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div className="max-h-[600px] overflow-y-auto custom-scrollbar">
@@ -923,6 +1120,26 @@ export const EnhancedStoreLocator: React.FC = () => {
                   {isNavigating ? 'Opening...' : 'Get Enhanced Directions'}
                 </button>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* Database Diagnostics Modal */}
+        {showDatabaseDiagnostics && databaseStatus?.diagnostics && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+            <div className="clean-glass-strong rounded-2xl p-6 max-w-4xl w-full max-h-[80vh] overflow-auto">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-xl font-semibold text-heading">Database Diagnostics</h3>
+                <button
+                  onClick={() => setShowDatabaseDiagnostics(false)}
+                  className="clean-button p-2 rounded-lg"
+                >
+                  ×
+                </button>
+              </div>
+              <pre className="text-xs bg-gray-50 p-4 rounded-lg overflow-auto">
+                {JSON.stringify(databaseStatus.diagnostics, null, 2)}
+              </pre>
             </div>
           </div>
         )}
