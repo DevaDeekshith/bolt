@@ -156,35 +156,16 @@ export const subscribeToStoreUpdates = (
   };
 };
 
-// Add some test data if table is empty
+// Add some test data if table is empty - REMOVED due to RLS policy restrictions
 export const addTestData = async () => {
-  try {
-    console.log('🧪 Adding test data to store_locations...');
-    
-    const testStores = [
-      { Name: 'GudGum Downtown', Location: 'MG Road, Bangalore, Karnataka, India' },
-      { Name: 'GudGum Mall', Location: 'Forum Mall, Koramangala, Bangalore, Karnataka, India' },
-      { Name: 'GudGum Express', Location: 'Indiranagar, Bangalore, Karnataka, India' },
-      { Name: 'GudGum Central', Location: 'Commercial Street, Bangalore, Karnataka, India' },
-      { Name: 'GudGum Plaza', Location: 'Brigade Road, Bangalore, Karnataka, India' }
-    ];
-    
-    const { data, error } = await supabase
-      .from('store_locations')
-      .insert(testStores)
-      .select();
-    
-    if (error) {
-      console.error('❌ Error adding test data:', error);
-      return { success: false, error: error.message };
-    }
-    
-    console.log('✅ Test data added successfully:', data);
-    return { success: true, data };
-  } catch (error) {
-    console.error('💥 Exception adding test data:', error);
-    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
-  }
+  console.log('🧪 Skipping test data insertion due to RLS policy restrictions...');
+  console.log('ℹ️ To add test data, please use the Supabase dashboard or configure RLS policies to allow anon inserts');
+  
+  return { 
+    success: false, 
+    error: 'Test data insertion skipped due to RLS policy restrictions. Please add data manually through Supabase dashboard.',
+    skipped: true
+  };
 };
 
 // Comprehensive diagnostics
@@ -248,7 +229,7 @@ export const runDatabaseDiagnostics = async () => {
       };
     }
     
-    // Test 4: Permissions
+    // Test 4: Permissions (only test SELECT to avoid RLS violations)
     console.log('🔐 Testing permissions...');
     try {
       // Test SELECT
@@ -257,17 +238,12 @@ export const runDatabaseDiagnostics = async () => {
         .select('"Name"')
         .limit(1);
       
-      // Test INSERT (will likely fail, but that's expected)
-      const { error: insertError } = await supabase
-        .from('store_locations')
-        .insert({ Name: 'Test Store', Location: 'Test Location' })
-        .select();
-      
+      // Skip INSERT test to avoid RLS policy violations
       results.permissions = {
         select: !selectError,
-        insert: !insertError,
+        insert: 'skipped', // Skip INSERT test due to RLS policies
         selectError: selectError?.message,
-        insertError: insertError?.message
+        insertError: 'Test skipped to avoid RLS policy violations'
       };
     } catch (error) {
       results.permissions = {
@@ -285,12 +261,17 @@ export const runDatabaseDiagnostics = async () => {
     }
     
     if (results.dataCount.success && results.dataCount.count === 0) {
-      results.recommendations.push('Add some test data to the store_locations table');
+      results.recommendations.push('Add store data manually through Supabase dashboard');
+      results.recommendations.push('Configure RLS policies to allow anon role INSERT if automatic data seeding is needed');
     }
     
     if (!results.permissions.select) {
       results.recommendations.push('Enable RLS policies for public read access');
     }
+    
+    // Add RLS-specific recommendations
+    results.recommendations.push('Current RLS policies prevent automatic test data insertion');
+    results.recommendations.push('To add data: Go to Supabase Dashboard > Table Editor > store_locations > Insert row');
     
   } catch (error) {
     console.error('💥 Diagnostics failed:', error);
@@ -301,7 +282,7 @@ export const runDatabaseDiagnostics = async () => {
   return results;
 };
 
-// Quick setup function
+// Quick setup function - updated to handle RLS restrictions
 export const quickSetup = async () => {
   console.log('🚀 Running quick setup...');
   
@@ -319,16 +300,15 @@ export const quickSetup = async () => {
     
     // Check if we have data
     if (connectionTest.rowCount === 0) {
-      console.log('📝 No data found, adding test data...');
-      const testDataResult = await addTestData();
+      console.log('📝 No data found, but skipping automatic test data insertion due to RLS policies...');
       
-      if (testDataResult.success) {
-        return {
-          success: true,
-          message: 'Setup complete with test data',
-          testDataAdded: true
-        };
-      }
+      return {
+        success: true,
+        message: 'Database connected but empty. Please add store data manually through Supabase dashboard.',
+        testDataAdded: false,
+        needsManualData: true,
+        instructions: 'Go to Supabase Dashboard > Table Editor > store_locations > Insert row'
+      };
     }
     
     return {
